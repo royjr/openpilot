@@ -11,6 +11,7 @@ class SentryMode:
     self.prev_accel = np.zeros(3)
     self.initialized = False
 
+
   def get_movement_type(self, current, previous):
     diff = np.abs(current - previous)
     ax_mapping = {0: "X-axis", 1: "Y-axis", 2: "Z-axis"}
@@ -34,7 +35,7 @@ class SentryMode:
 
       #if delta > THRESHOLD:
       movement_type = self.get_movement_type(curr_accel, self.prev_accel)
-      print(f"Movement primarily in the direction of: {movement_type}")
+      print("Movement primarily in the direction of: {}".format(movement_type))
 
       self.prev_accel = curr_accel
 
