@@ -25,7 +25,7 @@ MOVEMENT_TIME = 60.  # each movement resets onroad timer to this
 MIN_TIME_ONROAD = MOVEMENT_TIME + 5.
 INACTIVE_TIME = 2. * 60.  # car needs to be inactive for this time before sentry mode is enabled
 
-DEBUG = False
+DEBUG = True
 
 signals = [
   ("LOCK_STATUS_CHANGED", "DOOR_LOCKS", 0),
