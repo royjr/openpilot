@@ -2,7 +2,7 @@
 import numpy as np
 from cereal import messaging
 
-THRESHOLD = 0.5  # Adjust as necessary based on sensitivity requirements
+THRESHOLD = 0.1  # Adjust as necessary based on sensitivity requirements
 
 
 class SentryMode:
