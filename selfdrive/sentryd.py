@@ -32,10 +32,9 @@ class SentryMode:
 
       delta = abs(magnitude_curr - magnitude_prev)
 
-      if delta > THRESHOLD:
-        movement_type = self.get_movement_type(curr_accel, self.prev_accel)
-        print("Movement Detected!")
-        print(f"Movement primarily in the direction of: {movement_type}")
+      #if delta > THRESHOLD:
+      movement_type = self.get_movement_type(curr_accel, self.prev_accel)
+      print(f"Movement primarily in the direction of: {movement_type}")
 
       self.prev_accel = curr_accel
 
