@@ -19,25 +19,26 @@ class SentryMode:
     return ax_mapping[dominant_axis]
 
   def update(self):
-    for sensor in self.sm['accelerometer']:
-      accel_data = sensor['acceleration']['v']
-      curr_accel = np.array(accel_data)
+    sensor = self.sm['accelerometer']
+    
+    accel_data = sensor['acceleration']['v']
+    curr_accel = np.array(accel_data)
 
-      if not self.initialized:
-        self.prev_accel = curr_accel
-        self.initialized = True
-        continue
-
-      magnitude_prev = np.linalg.norm(self.prev_accel)
-      magnitude_curr = np.linalg.norm(curr_accel)
-
-      delta = abs(magnitude_curr - magnitude_prev)
-
-      #if delta > THRESHOLD:
-      movement_type = self.get_movement_type(curr_accel, self.prev_accel)
-      print("Movement primarily in the direction of: {}".format(movement_type))
-
+    if not self.initialized:
       self.prev_accel = curr_accel
+      self.initialized = True
+      continue
+
+    magnitude_prev = np.linalg.norm(self.prev_accel)
+    magnitude_curr = np.linalg.norm(curr_accel)
+
+    delta = abs(magnitude_curr - magnitude_prev)
+
+    #if delta > THRESHOLD:
+    movement_type = self.get_movement_type(curr_accel, self.prev_accel)
+    print("Movement primarily in the direction of: {}".format(movement_type))
+
+    self.prev_accel = curr_accel
 
   def start(self):
     while True:
