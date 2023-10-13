@@ -2,7 +2,7 @@
 import numpy as np
 from cereal import messaging
 
-THRESHOLD = 0.1  # Adjust as necessary based on sensitivity requirements
+THRESHOLD = 0.03  # Adjust as necessary based on sensitivity requirements
 
 
 class SentryMode:
@@ -11,14 +11,13 @@ class SentryMode:
     self.prev_accel = np.zeros(3)
     self.initialized = False
 
-
   def get_movement_type(self, current, previous):
     diff = np.abs(current - previous)
     ax_mapping = {0: "X-axis", 1: "Y-axis", 2: "Z-axis"}
     dominant_axis = np.argmax(diff)
     return ax_mapping[dominant_axis]
 
-def update(self):
+  def update(self):
     sensor = self.sm['accelerometer']
     
     # Try accessing fields with dot notation
@@ -37,11 +36,9 @@ def update(self):
 
     if delta > THRESHOLD:
       movement_type = self.get_movement_type(curr_accel, self.prev_accel)
-      print("Movement Detected!")
-      print("Movement primarily in the direction of: {}".format(movement_type))
+      print("Movement: {}, Value: {}".format(movement_type, delta))
 
     self.prev_accel = curr_accel
-
 
   def start(self):
     while True:
