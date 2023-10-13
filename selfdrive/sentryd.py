@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 import numpy as np
 from cereal import messaging
-from openpilot.system.swaglog import cloudlog
 
 THRESHOLD = 0.03  # Sensitivity threshold
 
@@ -40,7 +39,7 @@ class SentryMode:
     # Tripped
     if delta > THRESHOLD:
       movement_type = self.get_movement_type(curr_accel, self.prev_accel)
-      cloudlog.warning("Movement: {}, Value: {}".format(movement_type, delta))
+      print("Movement: {}, Value: {}".format(movement_type, delta))
 
     self.prev_accel = curr_accel
 
