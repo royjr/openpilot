@@ -2,9 +2,9 @@
 import numpy as np
 
 from cereal import messaging
-from common.filter_simple import FirstOrderFilter
-from common.params import Params
-from common.realtime import sec_since_boot, DT_CTRL
+from openpilot.common.filter_simple import FirstOrderFilter
+from openpilot.common.params import Params
+from openpilot.common.realtime import sec_since_boot, DT_CTRL
 from opendbc.can.parser import CANParser
 
 # ****** Sentry mode states ******
