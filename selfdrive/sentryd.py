@@ -27,7 +27,7 @@ class SentryMode:
     if not self.initialized:
       self.prev_accel = curr_accel
       self.initialized = True
-      continue
+      return
 
     magnitude_prev = np.linalg.norm(self.prev_accel)
     magnitude_curr = np.linalg.norm(curr_accel)
