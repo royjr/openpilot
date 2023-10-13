@@ -18,10 +18,11 @@ class SentryMode:
     dominant_axis = np.argmax(diff)
     return ax_mapping[dominant_axis]
 
-  def update(self):
+def update(self):
     sensor = self.sm['accelerometer']
     
-    accel_data = sensor['acceleration']['v']
+    # Try accessing fields with dot notation
+    accel_data = sensor.acceleration.v
     curr_accel = np.array(accel_data)
 
     if not self.initialized:
@@ -34,11 +35,13 @@ class SentryMode:
 
     delta = abs(magnitude_curr - magnitude_prev)
 
-    #if delta > THRESHOLD:
-    movement_type = self.get_movement_type(curr_accel, self.prev_accel)
-    print("Movement primarily in the direction of: {}".format(movement_type))
+    if delta > THRESHOLD:
+      movement_type = self.get_movement_type(curr_accel, self.prev_accel)
+      print("Movement Detected!")
+      print("Movement primarily in the direction of: {}".format(movement_type))
 
     self.prev_accel = curr_accel
+
 
   def start(self):
     while True:
