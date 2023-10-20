@@ -49,6 +49,7 @@ class SentryMode:
       movement_type = self.get_movement_type(curr_accel, self.prev_accel)
       print("Movement: {}, Value: {}".format(movement_type, delta))
       self.last_timestamp = time.monotonic()
+      self.sentry_status = True
 
     # Trigger Reset
     now_timestamp = time.monotonic()
