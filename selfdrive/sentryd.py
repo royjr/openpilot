@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import numpy as np
 from cereal import messaging
-from openpilot.common.realtime import sec_since_boot
+import time
 
 SENSITIVITY_THRESHOLD = 0.03
 TRIGGERED_TIME = 2
@@ -48,9 +48,10 @@ class SentryMode:
     if delta > THRESHOLD:
       movement_type = self.get_movement_type(curr_accel, self.prev_accel)
       print("Movement: {}, Value: {}".format(movement_type, delta))
+      self.last_timestamp = time.monotonic()
 
     # Trigger Reset
-    now_timestamp = sec_since_boot()
+    now_timestamp = time.monotonic()
     if now_timestamp - self.last_timestamp > TRIGGERED_TIME:
       self.sentry_status = False
 
