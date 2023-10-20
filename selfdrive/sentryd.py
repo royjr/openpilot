@@ -16,7 +16,7 @@ class SentryMode:
     self.prev_accel = np.zeros(3)
     self.initialized = False
     self.sentry_status = False
-    self.last_triggered = 0
+    self.last_timestamp = 0
 
 
   def get_movement_type(self, current, previous):
