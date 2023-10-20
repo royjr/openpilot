@@ -2,7 +2,6 @@
 import numpy as np
 from cereal import messaging
 import time
-import random
 
 SENSITIVITY_THRESHOLD = 0.03
 TRIGGERED_TIME = 2
@@ -56,9 +55,6 @@ class SentryMode:
     now_timestamp = time.monotonic()
     if now_timestamp - self.last_timestamp > TRIGGERED_TIME:
       self.sentry_status = False
-
-    # Trigger Status
-    if random.random() < 0.1:
       print("self.sentry_status: {}".format(self.sentry_status))
 
     self.prev_accel = curr_accel
