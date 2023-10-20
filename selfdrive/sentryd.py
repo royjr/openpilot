@@ -57,9 +57,10 @@ class SentryMode:
       self.sentry_status = False
 
     # Trigger Status
-    if int(time.monotonic()) % 10 < 5:
+    if random.random() < 0.1:
       print("self.sentry_status: {}".format(self.sentry_status))
-      self.prev_accel = curr_accel
+
+    self.prev_accel = curr_accel
 
 
   # def publish(self):
