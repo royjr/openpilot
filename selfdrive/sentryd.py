@@ -53,7 +53,7 @@ class SentryMode:
 
     # Trigger Reset
     now_timestamp = time.monotonic()
-    if now_timestamp - self.last_timestamp > TRIGGERED_TIME:
+    if now_timestamp - self.last_timestamp > TRIGGERED_TIME and self.sentry_status:
       self.sentry_status = False
       print("self.sentry_status: {}".format(self.sentry_status))
 
