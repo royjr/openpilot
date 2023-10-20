@@ -11,7 +11,7 @@ class SentryMode:
 
   def __init__(self):
     self.sm = messaging.SubMaster(['accelerometer'], poll=['accelerometer'])
-    self.pm = messaging.PubMaster(['sentryState'])
+    # self.pm = messaging.PubMaster(['sentryState'])
 
     self.prev_accel = np.zeros(3)
     self.initialized = False
@@ -60,18 +60,18 @@ class SentryMode:
     self.prev_accel = curr_accel
 
 
-  def publish(self):
-    sentry_state = messaging.new_message('sentryState')
-    sentry_state.sentryState.status = bool(self.sentry_status)
+  # def publish(self):
+  #   sentry_state = messaging.new_message('sentryState')
+  #   sentry_state.sentryState.status = bool(self.sentry_status)
 
-    self.pm.send('sentryState', sentry_state)
+  #   self.pm.send('sentryState', sentry_state)
 
 
   def start(self):
     while True:
       self.sm.update()
       self.update()
-      self.publish()
+      # self.publish()
 
 
 def main():
