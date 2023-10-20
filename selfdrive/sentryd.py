@@ -57,8 +57,9 @@ class SentryMode:
       self.sentry_status = False
 
     # Trigger Status
-    print("self.sentry_status: {}".format(self.sentry_status))
-    self.prev_accel = curr_accel
+    if now_timestamp % 5 == 0:
+      print("self.sentry_status: {}".format(self.sentry_status))
+      self.prev_accel = curr_accel
 
 
   # def publish(self):
