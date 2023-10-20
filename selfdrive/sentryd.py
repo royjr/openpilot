@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import numpy as np
 from cereal import messaging
-from common.realtime import sec_since_boot
+from openpilot.common.realtime import sec_since_boot
 
 SENSITIVITY_THRESHOLD = 0.03
 TRIGGERED_TIME = 2
