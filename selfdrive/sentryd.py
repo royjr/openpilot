@@ -1,15 +1,22 @@
 #!/usr/bin/env python3
 import numpy as np
 from cereal import messaging
+from common.realtime import sec_since_boot
 
-THRESHOLD = 0.03  # Sensitivity threshold
+SENSITIVITY_THRESHOLD = 0.03
+TRIGGERED_TIME = 2
 
 
 class SentryMode:
+
   def __init__(self):
     self.sm = messaging.SubMaster(['accelerometer'], poll=['accelerometer'])
+    self.pm = messaging.PubMaster(['sentryState'])
+
     self.prev_accel = np.zeros(3)
     self.initialized = False
+    self.sentry_status = False
+    self.last_triggered = 0
 
 
   def get_movement_type(self, current, previous):
@@ -17,6 +24,7 @@ class SentryMode:
     ax_mapping = {0: "X-axis", 1: "Y-axis", 2: "Z-axis"}
     dominant_axis = np.argmax(diff)
     return ax_mapping[dominant_axis]
+
 
   def update(self):
     sensor = self.sm['accelerometer']
@@ -36,17 +44,33 @@ class SentryMode:
 
     delta = abs(magnitude_curr - magnitude_prev)
 
-    # Tripped
+    # Triggered
     if delta > THRESHOLD:
       movement_type = self.get_movement_type(curr_accel, self.prev_accel)
       print("Movement: {}, Value: {}".format(movement_type, delta))
 
+    # Trigger Reset
+    now_timestamp = sec_since_boot()
+    if now_timestamp - self.last_timestamp > TRIGGERED_TIME:
+      self.sentry_status = False
+
+    # Trigger Status
+    print("self.sentry_status: {}".format(self.sentry_status))
     self.prev_accel = curr_accel
+
+
+  def publish(self):
+    sentry_state = messaging.new_message('sentryState')
+    sentry_state.sentryState.status = bool(self.sentry_status)
+
+    self.pm.send('sentryState', sentry_state)
+
 
   def start(self):
     while True:
       self.sm.update()
       self.update()
+      self.publish()
 
 
 def main():
