@@ -55,7 +55,7 @@ class SentryMode:
     now_timestamp = time.monotonic()
     if now_timestamp - self.last_timestamp > TRIGGERED_TIME and self.sentry_status:
       self.sentry_status = False
-      print("self.sentry_status: {}".format(self.sentry_status))
+      print("Movement Ended")
 
     self.prev_accel = curr_accel
 
