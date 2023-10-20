@@ -2,6 +2,7 @@
 import numpy as np
 from cereal import messaging
 import time
+import random
 
 SENSITIVITY_THRESHOLD = 0.03
 TRIGGERED_TIME = 2
