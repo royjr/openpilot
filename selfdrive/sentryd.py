@@ -32,6 +32,7 @@ class SentryMode:
 
     # Initialize
     if self.prev_accel is None:
+      print("YESSSSSSSSS")
       self.prev_accel = curr_accel
       print("self.prev_accel {}".format(self.prev_accel))
       print("curr_accel {}".format(curr_accel))
