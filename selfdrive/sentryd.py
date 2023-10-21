@@ -15,22 +15,17 @@ class SentryMode:
 
     self.prev_accel = np.zeros(3)
     self.sentry_status = False
-    self.last_timestamp = 0
 
 
   def get_movement_type(self, current, previous):
-    diff = np.abs(current - previous)
     ax_mapping = {0: "x-axis", 1: "y-axis", 2: "z-axis"}
-    dominant_axis = np.argmax(diff)
+    dominant_axis = np.argmax(np.abs(current - previous))
     return ax_mapping[dominant_axis]
 
 
-  def update(self):
-    sensor = self.sm['accelerometer']
-    
+  def update(self):    
     # Extract acceleration data
-    accel_data = sensor.acceleration.v
-    curr_accel = np.array(accel_data)
+    curr_accel = np.array(self.sm['accelerometer'].acceleration.v)
 
     # Initialize
     if self.prev_accel is None:
@@ -47,7 +42,7 @@ class SentryMode:
       self.sentry_status = True
 
     # Trigger Reset
-    if time.monotonic() - self.last_timestamp > TRIGGERED_TIME and self.sentry_status:
+    elif self.sentry_status and time.monotonic() - self.last_timestamp > TRIGGERED_TIME:
       self.sentry_status = False
       print("Movement Ended")
 
