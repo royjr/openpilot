@@ -27,9 +27,17 @@ class SentryMode:
     # Extract acceleration data
     curr_accel = np.array(self.sm['accelerometer'].acceleration.v)
 
+    print("self.prev_accel {}".format(self.prev_accel))
+    print("curr_accel {}".format(curr_accel))
+
     # Initialize
     if self.prev_accel is None:
       self.prev_accel = curr_accel
+      print("self.prev_accel {}".format(self.prev_accel))
+      print("curr_accel {}".format(curr_accel))
+
+    print("self.prev_accel {}".format(self.prev_accel))
+    print("curr_accel {}".format(curr_accel))
 
     # Calculate magnitude change
     delta = abs(np.linalg.norm(curr_accel) - np.linalg.norm(self.prev_accel))
