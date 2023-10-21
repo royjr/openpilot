@@ -13,7 +13,7 @@ class SentryMode:
     self.sm = messaging.SubMaster(['accelerometer'], poll=['accelerometer'])
     # self.pm = messaging.PubMaster(['sentryState'])
 
-    self.prev_accel = np.zeros(3)
+    self.prev_accel = None
     self.sentry_status = False
 
 
