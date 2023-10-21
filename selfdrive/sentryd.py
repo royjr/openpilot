@@ -18,7 +18,7 @@ class SentryMode:
 
 
   def get_movement_type(self, current, previous):
-    ax_mapping = {0: "x-axis", 1: "y-axis", 2: "z-axis"}
+    ax_mapping = {0: "X", 1: "Y", 2: "Z"}
     dominant_axis = np.argmax(np.abs(current - previous))
     return ax_mapping[dominant_axis]
 
