@@ -49,8 +49,8 @@ def deleter_thread(exit_event):
     out_of_bytes_internal = get_available_bytes(path_type="internal", default=MIN_BYTES + 1) < MIN_BYTES
     out_of_percent_internal = get_available_percent(path_type="internal", default=MIN_PERCENT + 1) < MIN_PERCENT
 
-    internal_path = PATH_DICT["internal"]
-    external_path = PATH_DICT["external"]
+    internal_path = Paths.log_root(),
+    external_path = Paths.log_root_external(),
 
     # If the internal storage is out of space
     if out_of_percent_internal or out_of_bytes_internal:
