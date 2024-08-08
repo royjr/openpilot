@@ -83,7 +83,7 @@ void Networking::connectToNetwork(const Network n) {
     wifi->activateWifiConnection(n.ssid);
   } else if (n.security_type == SecurityType::OPEN) {
     wifi->connect(n, false);
-  } else if (n.security_type == SecurityType::WPA) {
+  } else if (n.security_type == SecurityType::WPA || n.security_type == SecurityType::WPA3) {
     QString pass = InputDialog::getText(tr("Enter password"), this, tr("for \"%1\"").arg(QString::fromUtf8(n.ssid)), true, 8);
     if (!pass.isEmpty()) {
       wifi->connect(n, false, pass);
@@ -311,7 +311,7 @@ void WifiUI::refresh() {
       status_icon = checkmark;
     } else if (network.security_type == SecurityType::UNSUPPORTED) {
       status_icon = circled_slash;
-    } else if (network.security_type == SecurityType::WPA) {
+    } else if (network.security_type == SecurityType::WPA || network.security_type == SecurityType::WPA3) {
       status_icon = lock;
     }
     bool show_forget_btn = wifi->isKnownConnection(network.ssid) && !is_tethering_enabled;

@@ -173,11 +173,14 @@ SecurityType WifiManager::getSecurityType(const QVariantMap &properties) {
 
   // obtained by looking at flags of networks in the office as reported by an Android phone
   const int supports_wpa = NM_802_11_AP_SEC_PAIR_WEP40 | NM_802_11_AP_SEC_PAIR_WEP104 | NM_802_11_AP_SEC_GROUP_WEP40 | NM_802_11_AP_SEC_GROUP_WEP104 | NM_802_11_AP_SEC_KEY_MGMT_PSK;
+  const int supports_wpa3 = NM_802_11_AP_SEC_KEY_MGMT_SAE;
 
   if ((sflag == NM_802_11_AP_FLAGS_NONE) || ((sflag & NM_802_11_AP_FLAGS_WPS) && !(wpa_props & supports_wpa))) {
     return SecurityType::OPEN;
   } else if ((sflag & NM_802_11_AP_FLAGS_PRIVACY) && (wpa_props & supports_wpa) && !(wpa_props & NM_802_11_AP_SEC_KEY_MGMT_802_1X)) {
     return SecurityType::WPA;
+  } else if ((sflag & NM_802_11_AP_FLAGS_PRIVACY) && (wpa_props & supports_wpa3)) {
+    return SecurityType::WPA3;
   } else {
     LOGW("Unsupported network! sflag: %d, wpaflag: %d, rsnflag: %d", sflag, wpaflag, rsnflag);
     return SecurityType::UNSUPPORTED;
@@ -199,6 +202,12 @@ void WifiManager::connect(const Network &n, const bool is_hidden, const QString 
 
   if (n.security_type == SecurityType::WPA) {
     connection["802-11-wireless-security"]["key-mgmt"] = "wpa-psk";
+    connection["802-11-wireless-security"]["auth-alg"] = "open";
+    connection["802-11-wireless-security"]["psk"] = password;
+  }
+
+  if (n.security_type == SecurityType::WPA3) {
+    connection["802-11-wireless-security"]["key-mgmt"] = "sae";
     connection["802-11-wireless-security"]["auth-alg"] = "open";
     connection["802-11-wireless-security"]["psk"] = password;
   }

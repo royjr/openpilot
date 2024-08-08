@@ -9,6 +9,7 @@
 enum class SecurityType {
   OPEN,
   WPA,
+  WPA3,
   UNSUPPORTED
 };
 enum class ConnectedType {
