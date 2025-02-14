@@ -128,7 +128,7 @@ def ui_thread(addr):
     rgb = cv2.cvtColor(imgff[:vipc_client.height * 3 // 2, :vipc_client.width], cv2.COLOR_YUV2RGB_NV12)
 
     qcam = "QCAM" in os.environ
-    bb_scale = (528 if qcam else camera.fcam.width) / 640.
+    bb_scale = 0.8
     calib_scale = camera.fcam.width / 640.
     zoom_matrix = np.asarray([
         [bb_scale, 0., 0.],

@@ -100,7 +100,7 @@ def init_plots(arr, name_to_arr_idx, plot_xlims, plot_ylims, plot_names, plot_co
                     "m": (1, 0, 1)}
 
   dpi = 90
-  fig = plt.figure(figsize=(575 / dpi, 600 / dpi), dpi=dpi)
+  fig = plt.figure(figsize=(575 / dpi, 600 / dpi), dpi=50)
   canvas = FigureCanvasAgg(fig)
 
   fig.set_facecolor((0.2, 0.2, 0.2))
