@@ -32,7 +32,12 @@ class ModemDiag:
     payload = payload[:-1]
     payload = payload.replace(bytes([self.ESCAPE_CHAR[0], self.TRAILER_CHAR[0] ^ 0x20]), self.TRAILER_CHAR)
     payload = payload.replace(bytes([self.ESCAPE_CHAR[0], self.ESCAPE_CHAR[0] ^ 0x20]), self.ESCAPE_CHAR)
-    assert payload[-2:] == pack('<H', ModemDiag.ccitt_crc16(payload[:-2]))
+    # assert payload[-2:] == pack('<H', ModemDiag.ccitt_crc16(payload[:-2]))
+    computed_crc = pack('<H', ModemDiag.ccitt_crc16(payload[:-2]))
+    received_crc = payload[-2:]
+    if received_crc != computed_crc:  # Only print if it’s about to fail
+      print(f"Assertion Failed: Expected CRC: {computed_crc.hex()}, Received CRC: {received_crc.hex()}, Payload: {payload[:-2].hex()}")
+    assert received_crc == computed_crc
     return payload[:-2]
 
   def recv(self):
@@ -65,6 +70,8 @@ def send_recv(diag, packet_type, packet_payload):
     opcode, payload = diag.recv()
     if opcode != DIAG_LOG_F:
       break
+  if opcode != DIAG_LOG_F:
+    print(f"Unexpected opcode: {opcode}, Payload: {payload.hex()}")  # Only if failing
   return opcode, payload
 
 def setup_logs(diag, types_to_log):
@@ -72,6 +79,8 @@ def setup_logs(diag, types_to_log):
 
   header_spec = '<3xII'
   operation, status = unpack_from(header_spec, payload)
+  if operation != LOG_CONFIG_RETRIEVE_ID_RANGES_OP or status != LOG_CONFIG_SUCCESS_S:
+    print(f"Assertion Failed: Operation={operation}, Status={status}, Expected={LOG_CONFIG_RETRIEVE_ID_RANGES_OP}, {LOG_CONFIG_SUCCESS_S}")
   assert operation == LOG_CONFIG_RETRIEVE_ID_RANGES_OP
   assert status == LOG_CONFIG_SUCCESS_S
 
