@@ -32,7 +32,6 @@ class ModemDiag:
     payload = payload[:-1]
     payload = payload.replace(bytes([self.ESCAPE_CHAR[0], self.TRAILER_CHAR[0] ^ 0x20]), self.TRAILER_CHAR)
     payload = payload.replace(bytes([self.ESCAPE_CHAR[0], self.ESCAPE_CHAR[0] ^ 0x20]), self.ESCAPE_CHAR)
-    # assert payload[-2:] == pack('<H', ModemDiag.ccitt_crc16(payload[:-2]))
     computed_crc = pack('<H', ModemDiag.ccitt_crc16(payload[:-2]))
     received_crc = payload[-2:]
     if received_crc != computed_crc:  # Only print if it’s about to fail
