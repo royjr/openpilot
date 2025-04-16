@@ -312,8 +312,10 @@ class DriverMonitoring:
       self.current_events.add(EventName.tooDistracted)
 
     always_on_valid = self.always_on and not wrong_gear
-    if (driver_engaged and self.awareness > 0 and not self.active_monitoring_mode) or \
-       (not always_on_valid and not op_engaged) or \
+    # Reset awareness on wrong gear, or when not always on and not engaged,
+    # or when always on, not engaged, and awareness is zero.
+    if wrong_gear or \
+       (not self.always_on and not op_engaged) or \
        (always_on_valid and not op_engaged and self.awareness <= 0):
       # always reset on disengage with normal mode; disengage resets only on red if always on
       self._reset_awareness()
@@ -345,9 +347,10 @@ class DriverMonitoring:
     maybe_distracted = self.hi_stds > self.settings._HI_STD_FALLBACK_TIME or not self.face_detected
 
     if certainly_distracted or maybe_distracted:
-      # should always be counting if distracted unless at standstill (lowspeed for always-on) and reaching orange
+      # should always be counting if distracted unless at standstill (lowspeed for always-on) and reaching orange,
+      # or if in reverse gear.
       # also will not be reaching 0 if DM is active when not engaged
-      if not (standstill_orange_exemption or always_on_red_exemption or (always_on_lowspeed_exemption and _reaching_audible)):
+      if not (wrong_gear or standstill_orange_exemption or always_on_red_exemption or (always_on_lowspeed_exemption and _reaching_audible)):
         self.awareness = max(self.awareness - self.step_change, -0.1)
 
     alert = None
