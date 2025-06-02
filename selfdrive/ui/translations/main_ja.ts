@@ -63,10 +63,6 @@
         <translation>従量制通信設定</translation>
     </message>
     <message>
-        <source>Prevent large data uploads when on a metered connection</source>
-        <translation>大量のデータのアップロードを防止する</translation>
-    </message>
-    <message>
         <source>Hidden Network</source>
         <translation>ネットワーク非表示</translation>
     </message>
@@ -85,6 +81,30 @@
     <message>
         <source>for &quot;%1&quot;</source>
         <translation>[%1]</translation>
+    </message>
+    <message>
+        <source>Prevent large data uploads when on a metered cellular connection</source>
+        <translation>モバイルデータ回線を使用しているときは大容量データをアップロードしません</translation>
+    </message>
+    <message>
+        <source>default</source>
+        <translation>標準設定</translation>
+    </message>
+    <message>
+        <source>metered</source>
+        <translation>従量制</translation>
+    </message>
+    <message>
+        <source>unmetered</source>
+        <translation>定額制</translation>
+    </message>
+    <message>
+        <source>Wi-Fi Network Metered</source>
+        <translation>従量制のWi-Fiネットワーク</translation>
+    </message>
+    <message>
+        <source>Prevent large data uploads when on a metered Wi-Fi connection</source>
+        <translation>通信制限のあるWi-Fi接続では大容量データをアップロードしません</translation>
     </message>
 </context>
 <context>
@@ -368,13 +388,6 @@ Firehoseモードを有効にすると、学習データを最大限アップロ
         <translation>
             <numerusform>%n文字以上にして下さい！</numerusform>
         </translation>
-    </message>
-</context>
-<context>
-    <name>Installer</name>
-    <message>
-        <source>Installing...</source>
-        <translation>インストール中...</translation>
     </message>
 </context>
 <context>
