@@ -63,10 +63,6 @@
         <translation>محدود بالاتصال الخلوي</translation>
     </message>
     <message>
-        <source>Prevent large data uploads when on a metered connection</source>
-        <translation>منع تحميل البيانات الكبيرة عندما يكون الاتصال محدوداً</translation>
-    </message>
-    <message>
         <source>Hidden Network</source>
         <translation>شبكة مخفية</translation>
     </message>
@@ -85,6 +81,30 @@
     <message>
         <source>for &quot;%1&quot;</source>
         <translation>من أجل &quot;%1&quot;</translation>
+    </message>
+    <message>
+        <source>Prevent large data uploads when on a metered cellular connection</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>default</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>metered</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>unmetered</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Wi-Fi Network Metered</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Prevent large data uploads when on a metered Wi-Fi connection</source>
+        <translation type="unfinished"></translation>
     </message>
 </context>
 <context>
@@ -286,6 +306,14 @@
         <source>PAIR</source>
         <translation>إقران</translation>
     </message>
+    <message>
+        <source>Disengage to Reset Calibration</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source> Resetting calibration will restart openpilot if the car is powered on.</source>
+        <translation type="unfinished"></translation>
+    </message>
 </context>
 <context>
     <name>DriverViewWindow</name>
@@ -309,32 +337,41 @@
     <name>FirehosePanel</name>
     <message>
         <source>🔥 Firehose Mode 🔥</source>
-        <translation type="unfinished"></translation>
+        <translation>🔥 وضع خرطوم الحريق 🔥</translation>
     </message>
     <message>
         <source>openpilot learns to drive by watching humans, like you, drive.
 
 Firehose Mode allows you to maximize your training data uploads to improve openpilot&apos;s driving models. More data means bigger models, which means better Experimental Mode.</source>
-        <translation type="unfinished"></translation>
+        <translation>يتعلم تطبيق openpilot كيفية القيادة من خلال مشاهدة البشر، مثلك، أثناء القيادة.
+
+يتيح لك وضع خرطوم الحريق زيادة تحميلات بيانات التدريب لتحسين نماذج القيادة في OpenPilot. كلما زادت البيانات، زادت النماذج، مما يعني وضعًا تجريبيًا أفضل.</translation>
     </message>
     <message>
         <source>Firehose Mode: ACTIVE</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>For maximum effectiveness, bring your device inside and connect to a good USB-C adapter and Wi-Fi weekly.&lt;br&gt;&lt;br&gt;Firehose Mode can also work while you&apos;re driving if connected to a hotspot or unlimited SIM card.&lt;br&gt;&lt;br&gt;&lt;br&gt;&lt;b&gt;Frequently Asked Questions&lt;/b&gt;&lt;br&gt;&lt;br&gt;&lt;i&gt;Does it matter how or where I drive?&lt;/i&gt; Nope, just drive as you normally would.&lt;br&gt;&lt;br&gt;&lt;i&gt;What&apos;s a good USB-C adapter?&lt;/i&gt; Any fast phone or laptop charger should be fine.&lt;br&gt;&lt;br&gt;&lt;i&gt;Does it matter which software I run?&lt;/i&gt; Yes, only upstream openpilot (and particular forks) are able to be used for training.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>&lt;b&gt;%1 %2&lt;/b&gt; of your driving are in the training dataset so far.</source>
-        <translation type="unfinished"></translation>
+        <translation>وضع خرطوم الحريق: نشط</translation>
     </message>
     <message>
         <source>ACTIVE</source>
-        <translation type="unfinished"></translation>
+        <translation>نشط</translation>
     </message>
     <message>
-        <source>&lt;span stylesheet=&apos;font-size: 60px; font-weight: bold; color: #e74c3c;&apos;&gt;INACTIVE&lt;/span&gt;: connect to unmetered network</source>
+        <source>For maximum effectiveness, bring your device inside and connect to a good USB-C adapter and Wi-Fi weekly.&lt;br&gt;&lt;br&gt;Firehose Mode can also work while you&apos;re driving if connected to a hotspot or unlimited SIM card.&lt;br&gt;&lt;br&gt;&lt;br&gt;&lt;b&gt;Frequently Asked Questions&lt;/b&gt;&lt;br&gt;&lt;br&gt;&lt;i&gt;Does it matter how or where I drive?&lt;/i&gt; Nope, just drive as you normally would.&lt;br&gt;&lt;br&gt;&lt;i&gt;Do all of my segments get pulled in Firehose Mode?&lt;/i&gt; No, we selectively pull a subset of your segments.&lt;br&gt;&lt;br&gt;&lt;i&gt;What&apos;s a good USB-C adapter?&lt;/i&gt; Any fast phone or laptop charger should be fine.&lt;br&gt;&lt;br&gt;&lt;i&gt;Does it matter which software I run?&lt;/i&gt; Yes, only upstream openpilot (and particular forks) are able to be used for training.</source>
+        <translation>للحصول على أقصى فعالية، أحضر جهازك إلى الداخل واتصل بمحول USB-C جيد وشبكة Wi-Fi أسبوعياً.&lt;br&gt;&lt;br&gt;يمكن أن يعمل وضع خرطوم الحريق أيضاً أثناء القيادة إذا كنت متصلاً بنقطة اتصال أو ببطاقة SIM غير محدودة.&lt;br&gt;&lt;br&gt;&lt;br&gt;&lt;b&gt;الأسئلة المتكررة&lt;/b&gt;&lt;br&gt;&lt;br&gt;&lt;i&gt;هل يهم كيف أو أين أقود؟&lt;/i&gt; لا، فقط قد كما تفعل عادة.&lt;br&gt;&lt;br&gt;&lt;i&gt;هل يتم سحب كل مقاطع رحلاتي في وضع خرطوم الحريق؟&lt;/i&gt; لا، نقوم بسحب مجموعة مختارة من مقاطع رحلاتك.&lt;br&gt;&lt;br&gt;&lt;i&gt;ما هو محول USB-C الجيد؟&lt;/i&gt; أي شاحن سريع للهاتف أو اللابتوب يجب أن يكون مناسباً.&lt;br&gt;&lt;br&gt;&lt;i&gt;هل يهم أي برنامج أستخدم؟&lt;/i&gt; نعم، فقط النسخة الأصلية من openpilot (وأفرع معينة) يمكن استخدامها للتدريب.</translation>
+    </message>
+    <message numerus="yes">
+        <source>&lt;b&gt;%n segment(s)&lt;/b&gt; of your driving is in the training dataset so far.</source>
+        <translation>
+            <numerusform>حتى الآن، يوجد &lt;/b&gt;%n مقطع&lt;b&gt;%n من قيادتك في مجموعة بيانات التدريب.</numerusform>
+            <numerusform>حتى الآن، يوجد &lt;/b&gt;%n مقطع&lt;b&gt;%n من قيادتك في مجموعة بيانات التدريب.</numerusform>
+            <numerusform>حتى الآن، يوجد &lt;/b&gt;%n مقطع&lt;b&gt;%n من قيادتك في مجموعة بيانات التدريب.</numerusform>
+            <numerusform>حتى الآن، يوجد &lt;/b&gt;%n مقطع&lt;b&gt;%n من قيادتك في مجموعة بيانات التدريب.</numerusform>
+            <numerusform>حتى الآن، يوجد &lt;/b&gt;%n مقطع&lt;b&gt;%n من قيادتك في مجموعة بيانات التدريب.</numerusform>
+            <numerusform>حتى الآن، يوجد &lt;/b&gt;%n مقطع&lt;b&gt;%n من قيادتك في مجموعة بيانات التدريب.</numerusform>
+        </translation>
+    </message>
+    <message>
+        <source>&lt;span stylesheet=&apos;font-size: 60px; font-weight: bold; color: #e74c3c;&apos;&gt;INACTIVE&lt;/span&gt;: connect to an unmetered network</source>
         <translation type="unfinished"></translation>
     </message>
 </context>
@@ -369,13 +406,6 @@ Firehose Mode allows you to maximize your training data uploads to improve openp
             <numerusform>تحتاج إلى %n أحرف على الأقل!</numerusform>
             <numerusform>تحتاج إلى %n حرف على الأقل!</numerusform>
         </translation>
-    </message>
-</context>
-<context>
-    <name>Installer</name>
-    <message>
-        <source>Installing...</source>
-        <translation>جارٍ التثبيت...</translation>
     </message>
 </context>
 <context>
@@ -574,14 +604,6 @@ Firehose Mode allows you to maximize your training data uploads to improve openp
 <context>
     <name>QObject</name>
     <message>
-        <source>Reboot</source>
-        <translation>إعادة التشغيل</translation>
-    </message>
-    <message>
-        <source>Exit</source>
-        <translation>إغلاق</translation>
-    </message>
-    <message>
         <source>openpilot</source>
         <translation>openpilot</translation>
     </message>
@@ -692,7 +714,7 @@ This may take up to a minute.</source>
     </message>
     <message>
         <source>Firehose</source>
-        <translation type="unfinished"></translation>
+        <translation>خرطوم الحريق</translation>
     </message>
 </context>
 <context>
@@ -1013,11 +1035,11 @@ This may take up to a minute.</source>
     </message>
     <message>
         <source>Welcome to openpilot</source>
-        <translation type="unfinished"></translation>
+        <translation>مرحباً بكم في openpilot</translation>
     </message>
     <message>
         <source>You must accept the Terms and Conditions to use openpilot. Read the latest terms at &lt;span style=&apos;color: #465BEA;&apos;&gt;https://comma.ai/terms&lt;/span&gt; before continuing.</source>
-        <translation type="unfinished"></translation>
+        <translation>يجب عليك قبول الشروط والأحكام لاستخدام openpilot. اقرأ أحدث الشروط على &lt;span style=&apos;color: #465BEA;&apos;&gt;https://comma.ai/terms&lt;/span&gt; قبل الاستمرار.</translation>
     </message>
 </context>
 <context>
@@ -1025,10 +1047,6 @@ This may take up to a minute.</source>
     <message>
         <source>Enable openpilot</source>
         <translation>تمكين openpilot</translation>
-    </message>
-    <message>
-        <source>Use the openpilot system for adaptive cruise control and lane keep driver assistance. Your attention is required at all times to use this feature. Changing this setting takes effect when the car is powered off.</source>
-        <translation>استخدم نظام openpilot من أجل الضبط التكيفي للسرعة والحفاظ على مساعدة السائق للبقاء في المسار. انتباهك مطلوب في جميع الأوقات مع استخدام هذه الميزة. يعمل هذا التغيير في الإعدادات عند إيقاف تشغيل السيارة.</translation>
     </message>
     <message>
         <source>Enable Lane Departure Warnings</source>
@@ -1130,6 +1148,14 @@ This may take up to a minute.</source>
         <source>Enable driver monitoring even when openpilot is not engaged.</source>
         <translation>تمكين مراقبة السائق حتى عندما لا يكون نظام OpenPilot مُفعّلاً.</translation>
     </message>
+    <message>
+        <source>Use the openpilot system for adaptive cruise control and lane keep driver assistance. Your attention is required at all times to use this feature.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source> Changing this setting will restart openpilot if the car is powered on.</source>
+        <translation type="unfinished"></translation>
+    </message>
 </context>
 <context>
     <name>Updater</name>
@@ -1170,15 +1196,15 @@ This may take up to a minute.</source>
     <name>WiFiPromptWidget</name>
     <message>
         <source>Open</source>
-        <translation type="unfinished"></translation>
+        <translation>انفتح</translation>
     </message>
     <message>
         <source>Maximize your training data uploads to improve openpilot&apos;s driving models.</source>
-        <translation type="unfinished"></translation>
+        <translation>قم بزيادة تحميلات بيانات التدريب الخاصة بك لتحسين نماذج القيادة الخاصة بـ openpilot.</translation>
     </message>
     <message>
         <source>&lt;span style=&apos;font-family: &quot;Noto Color Emoji&quot;;&apos;&gt;🔥&lt;/span&gt; Firehose Mode &lt;span style=&apos;font-family: Noto Color Emoji;&apos;&gt;🔥&lt;/span&gt;</source>
-        <translation type="unfinished"></translation>
+        <translation>&lt;span style=&apos;font-family: &quot;Noto Color Emoji&quot;;&apos;&gt;🔥&lt;/span&gt; وضع خرطوم الحريق &lt;span style=&apos;font-family: Noto Color Emoji;&apos;&gt;🔥&lt;/span&gt;</translation>
     </message>
 </context>
 <context>

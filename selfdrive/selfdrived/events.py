@@ -359,6 +359,16 @@ def personality_changed_alert(CP: car.CarParams, CS: car.CarState, sm: messaging
   return NormalPermanentAlert(f"Driving Personality: {personality}", duration=1.5)
 
 
+def invalid_lkas_setting_alert(CP: car.CarParams, CS: car.CarState, sm: messaging.SubMaster, metric: bool, soft_disable_time: int, personality) -> Alert:
+  text = "Toggle stock LKAS on or off to engage"
+  if CP.brand == "tesla":
+    text = "Switch to Traffic-Aware Cruise Control to engage"
+  elif CP.brand == "mazda":
+    text = "Enable your car's LKAS to engage"
+  elif CP.brand == "nissan":
+    text = "Disable your car's stock LKAS to engage"
+  return NormalPermanentAlert("Invalid LKAS setting", text)
+
 
 EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
   # ********** events with no alerts **********
@@ -412,8 +422,7 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
   },
 
   EventName.invalidLkasSetting: {
-    ET.PERMANENT: NormalPermanentAlert("Invalid LKAS setting",
-                                       "Toggle stock LKAS on or off to engage"),
+    ET.PERMANENT: invalid_lkas_setting_alert,
     ET.NO_ENTRY: NoEntryAlert("Invalid LKAS setting"),
   },
 
@@ -670,6 +679,11 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
                               visual_alert=VisualAlert.brakePressed),
   },
 
+  EventName.steerDisengage: {
+    ET.USER_DISABLE: EngagementAlert(AudibleAlert.disengage),
+    ET.NO_ENTRY: NoEntryAlert("Steering Pressed"),
+  },
+
   EventName.preEnableStandstill: {
     ET.PRE_ENABLE: Alert(
       "Release Brake to Engage",
@@ -832,6 +846,11 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
     ET.NO_ENTRY: NoEntryAlert("Radar Error: Restart the Car"),
   },
 
+  EventName.radarTempUnavailable: {
+    ET.SOFT_DISABLE: soft_disable_alert("Radar Temporarily Unavailable"),
+    ET.NO_ENTRY: NoEntryAlert("Radar Temporarily Unavailable"),
+  },
+
   # Every frame from the camera should be processed by the model. If modeld
   # is not processing frames fast enough they have to be dropped. This alert is
   # thrown when over 20% of frames are dropped.
@@ -884,7 +903,7 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
   # causing the connection to the panda to be lost
   EventName.usbError: {
     ET.SOFT_DISABLE: soft_disable_alert("USB Error: Reboot Your Device"),
-    ET.PERMANENT: NormalPermanentAlert("USB Error: Reboot Your Device", ""),
+    ET.PERMANENT: NormalPermanentAlert("USB Error: Reboot Your Device"),
     ET.NO_ENTRY: NoEntryAlert("USB Error: Reboot Your Device"),
   },
 
@@ -972,6 +991,9 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
     ET.WARNING: personality_changed_alert,
   },
 
+  EventName.userFlag: {
+    ET.PERMANENT: NormalPermanentAlert("Bookmark Saved", duration=1.5),
+  },
 }
 
 

@@ -48,6 +48,7 @@ struct OnroadEvent @0xc4fa6047f024e718 {
     preEnableStandstill @12;  # added during pre-enable state with brake
     gasPressedOverride @13;  # added when user is pressing gas with no disengage on gas
     steerOverride @14;
+    steerDisengage @94;  # exits active state
     cruiseDisabled @15;
     speedTooLow @16;
     outOfSpace @17;
@@ -59,6 +60,7 @@ struct OnroadEvent @0xc4fa6047f024e718 {
     pcmEnable @23;
     pcmDisable @24;
     radarFault @25;
+    radarTempUnavailable @93;
     brakeHold @26;
     parkBrake @27;
     manualRestart @28;
@@ -125,6 +127,7 @@ struct OnroadEvent @0xc4fa6047f024e718 {
     espActive @90;
     personalityChanged @91;
     aeb @92;
+    userFlag @95;
 
     soundsUnavailableDEPRECATED @47;
   }
@@ -487,6 +490,7 @@ struct DeviceState @0xa4d8b5af2aa492eb {
   # device thermals
   cpuTempC @26 :List(Float32);
   gpuTempC @27 :List(Float32);
+  dspTempC @49 :Float32;
   memoryTempC @28 :Float32;
   nvmeTempC @35 :List(Float32);
   modemTempC @36 :List(Float32);
@@ -728,7 +732,7 @@ struct PeripheralState {
 struct RadarState @0x9a185389d6fdd05f {
   mdMonoTime @6 :UInt64;
   carStateMonoTime @11 :UInt64;
-  radarErrors @12 :List(Car.RadarData.Error);
+  radarErrors @13 :Car.RadarData.Error;
 
   leadOne @3 :LeadData;
   leadTwo @4 :LeadData;
@@ -762,6 +766,7 @@ struct RadarState @0x9a185389d6fdd05f {
   calPercDEPRECATED @9 :Int8;
   canMonoTimesDEPRECATED @10 :List(UInt64);
   cumLagMsDEPRECATED @5 :Float32;
+  radarErrorsDEPRECATED @12 :List(Car.RadarData.ErrorDEPRECATED);
 }
 
 struct LiveCalibrationData {
@@ -1172,6 +1177,8 @@ struct ModelDataV2 {
 
   struct Action {
     desiredCurvature @0 :Float32;
+    desiredAcceleration @1 :Float32;
+    shouldStop @2 :Bool;
   }
 }
 
@@ -1584,6 +1591,10 @@ struct UbloxGnss {
       svId @0 :UInt8;
       gnssId @1 :UInt8;
       flagsBitfield @2 :UInt32;
+      cno @3 :UInt8;
+      elevationDeg @4 :Int8;
+      azimuthDeg @5 :Int16;
+      pseudorangeResidual @6 :Float32;
     }
   }
 
@@ -2272,6 +2283,22 @@ struct LiveTorqueParametersData {
   useParams @12 :Bool;
 }
 
+struct LiveDelayData {
+  lateralDelay @0 :Float32;
+  validBlocks @1 :Int32;
+  status @2 :Status;
+
+  lateralDelayEstimate @3 :Float32;
+  lateralDelayEstimateStd @5 :Float32;
+  points @4 :List(Float32);
+
+  enum Status {
+    unestimated @0;
+    estimated @1;
+    invalid @2;
+  }
+}
+
 struct LiveMapDataDEPRECATED {
   speedLimitValid @0 :Bool;
   speedLimit @1 :Float32;
@@ -2502,6 +2529,7 @@ struct Event {
     gnssMeasurements @91 :GnssMeasurements;
     liveParameters @61 :LiveParametersData;
     liveTorqueParameters @94 :LiveTorqueParametersData;
+    liveDelay @146 : LiveDelayData;
     cameraOdometry @63 :CameraOdometry;
     thumbnail @66: Thumbnail;
     onroadEvents @134: List(OnroadEvent);
