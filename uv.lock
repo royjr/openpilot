@@ -116,7 +116,7 @@ wheels = [
 [[package]]
 name = "capnproto"
 version = "1.0.1"
-source = { git = "https://github.com/commaai/dependencies.git?subdirectory=capnproto&rev=releases#5fc3994af75440c9222d627d14a24550f27a1e7f" }
+source = { git = "https://github.com/commaai/dependencies.git?subdirectory=capnproto&rev=releases#d9eaf5b01ed0b0f036a0463e13d6e101352ffdd6" }
 
 [[package]]
 name = "casadi"
@@ -385,7 +385,7 @@ wheels = [
 [[package]]
 name = "ffmpeg"
 version = "7.1.0"
-source = { git = "https://github.com/commaai/dependencies.git?subdirectory=ffmpeg&rev=releases#5fc3994af75440c9222d627d14a24550f27a1e7f" }
+source = { git = "https://github.com/commaai/dependencies.git?subdirectory=ffmpeg&rev=releases#d9eaf5b01ed0b0f036a0463e13d6e101352ffdd6" }
 
 [[package]]
 name = "fonttools"
@@ -432,7 +432,7 @@ wheels = [
 [[package]]
 name = "gcc-arm-none-eabi"
 version = "13.2.1"
-source = { git = "https://github.com/commaai/dependencies.git?subdirectory=gcc-arm-none-eabi&rev=releases#5fc3994af75440c9222d627d14a24550f27a1e7f" }
+source = { git = "https://github.com/commaai/dependencies.git?subdirectory=gcc-arm-none-eabi&rev=releases#d9eaf5b01ed0b0f036a0463e13d6e101352ffdd6" }
 
 [[package]]
 name = "ghp-import"
@@ -445,6 +445,11 @@ sdist = { url = "https://files.pythonhosted.org/packages/d9/29/d40217cbe2f6b1359
 wheels = [
     { url = "https://files.pythonhosted.org/packages/f7/ec/67fbef5d497f86283db54c22eec6f6140243aae73265799baaaa19cd17fb/ghp_import-2.1.0-py3-none-any.whl", hash = "sha256:8337dd7b50877f163d4c0289bc1f1c7f127550241988d568c1db512c4324a619", size = 11034, upload-time = "2022-05-02T15:47:14.552Z" },
 ]
+
+[[package]]
+name = "git-lfs"
+version = "3.6.1"
+source = { git = "https://github.com/commaai/dependencies.git?subdirectory=git-lfs&rev=releases#d9eaf5b01ed0b0f036a0463e13d6e101352ffdd6" }
 
 [[package]]
 name = "google-crc32c"
@@ -768,6 +773,7 @@ dependencies = [
     { name = "crcmod-plus" },
     { name = "cython" },
     { name = "ffmpeg" },
+    { name = "git-lfs" },
     { name = "inputs" },
     { name = "jeepney" },
     { name = "json-rpc" },
@@ -840,6 +846,7 @@ requires-dist = [
     { name = "dearpygui", marker = "(platform_machine != 'aarch64' and extra == 'tools') or (sys_platform != 'linux' and extra == 'tools')", specifier = ">=2.1.0" },
     { name = "ffmpeg", git = "https://github.com/commaai/dependencies.git?subdirectory=ffmpeg&rev=releases" },
     { name = "gcc-arm-none-eabi", marker = "extra == 'dev'", git = "https://github.com/commaai/dependencies.git?subdirectory=gcc-arm-none-eabi&rev=releases" },
+    { name = "git-lfs", git = "https://github.com/commaai/dependencies.git?subdirectory=git-lfs&rev=releases" },
     { name = "hypothesis", marker = "extra == 'testing'", specifier = "==6.47.*" },
     { name = "inputs" },
     { name = "jeepney" },
@@ -1616,7 +1623,7 @@ wheels = [
 [[package]]
 name = "zeromq"
 version = "4.3.5"
-source = { git = "https://github.com/commaai/dependencies.git?subdirectory=zeromq&rev=releases#5fc3994af75440c9222d627d14a24550f27a1e7f" }
+source = { git = "https://github.com/commaai/dependencies.git?subdirectory=zeromq&rev=releases#d9eaf5b01ed0b0f036a0463e13d6e101352ffdd6" }
 
 [[package]]
 name = "zstandard"
