@@ -32,7 +32,6 @@ brew "coreutils"
 brew "eigen"
 brew "llvm"
 brew "zeromq"
-brew "portaudio"
 EOS
 
 echo "[ ] finished brew install t=$SECONDS"

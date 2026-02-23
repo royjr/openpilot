@@ -42,7 +42,6 @@ function install_ubuntu_common_requirements() {
     libncurses5-dev \
     libzmq3-dev \
     libzstd-dev \
-    portaudio19-dev \
     gettext
 }
 
