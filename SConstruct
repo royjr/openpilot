@@ -42,9 +42,11 @@ if arch != "larch64":
   import capnproto
   import eigen
   import ffmpeg as ffmpeg_pkg
+  import ncurses
   import python3_dev
   import zeromq
-  pkgs = [capnproto, eigen, ffmpeg_pkg, zeromq]
+  import zstd
+  pkgs = [capnproto, eigen, ffmpeg_pkg, ncurses, zeromq, zstd]
   py_include = python3_dev.INCLUDE_DIR
 else:
   # TODO: remove when AGNOS has our new vendor pkgs
