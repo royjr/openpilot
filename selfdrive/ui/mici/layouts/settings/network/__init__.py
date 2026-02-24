@@ -168,6 +168,7 @@ class NetworkLayoutMici(NavWidget):
 
   def hide_event(self):
     super().hide_event()
+    self._scroller.hide_event()
     self._wifi_manager.set_active(False)
 
     gui_app.set_nav_stack_tick(None)
