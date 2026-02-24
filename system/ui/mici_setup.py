@@ -14,8 +14,10 @@ from collections.abc import Callable
 import pyray as rl
 
 from cereal import log
+from openpilot.common.realtime import config_realtime_process, set_core_affinity
+from openpilot.common.swaglog import cloudlog
 from openpilot.common.utils import run_cmd
-from openpilot.system.hardware import HARDWARE
+from openpilot.system.hardware import HARDWARE, TICI
 from openpilot.system.ui.lib.application import gui_app, FontWeight
 from openpilot.system.ui.lib.wifi_manager import WifiManager
 from openpilot.system.ui.lib.scroll_panel2 import GuiScrollPanel2
@@ -704,6 +706,14 @@ class Setup(Widget):
 
 
 def main():
+  config_realtime_process(0, 51)
+  # attempt to affine. AGNOS will start setup with all cores, should only fail when manually launching with screen off
+  if TICI:
+    try:
+      set_core_affinity([5])
+    except OSError:
+      cloudlog.exception("Failed to set core affinity for setup process")
+
   try:
     gui_app.init_window("Setup")
     setup = Setup()
