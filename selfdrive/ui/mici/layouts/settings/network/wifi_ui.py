@@ -298,7 +298,8 @@ class WifiUIMici(NavWidget):
     self._loading_animation.show_event()
     self._wifi_manager.set_active(True)
     self._scroller.items.clear()
-    self._update_buttons()
+    # trigger button update on latest sorted networks
+    self._on_network_updated(self._wifi_manager.networks)
 
   def hide_event(self):
     super().hide_event()

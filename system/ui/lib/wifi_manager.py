@@ -154,7 +154,7 @@ class WifiState:
 
 class WifiManager:
   def __init__(self):
-    self._networks: list[Network] = []  # a network can be comprised of multiple APs
+    self._networks: list[Network] = []  # an unsorted list of available Networks. a Network can be comprised of multiple APs
     self._active = True  # used to not run when not in settings
     self._exit = False
 
@@ -264,7 +264,8 @@ class WifiManager:
 
   @property
   def networks(self) -> list[Network]:
-    return self._networks
+    # Sort by connected/connecting, then known, then strength, then alphabetically. This is a pure UI ordering and should not affect underlying state.
+    return sorted(self._networks, key=lambda n: (n.ssid != self._wifi_state.ssid, not self.is_connection_saved(n.ssid), -n.strength, n.ssid.lower()))
 
   @property
   def wifi_state(self) -> WifiState:
@@ -826,13 +827,9 @@ class WifiManager:
             # catch all for parsing errors
             cloudlog.exception(f"Failed to parse AP properties for {ap_path}")
 
-        networks = [Network.from_dbus(ssid, ap_list, ssid == self._tethering_ssid) for ssid, ap_list in aps.items()]
-        networks.sort(key=lambda n: (n.ssid != self._wifi_state.ssid, not self.is_connection_saved(n.ssid), -n.strength, n.ssid.lower()))
-        self._networks = networks
-
+        self._networks = [Network.from_dbus(ssid, ap_list, ssid == self._tethering_ssid) for ssid, ap_list in aps.items()]
         self._update_active_connection_info()
-
-        self._enqueue_callbacks(self._networks_updated, self._networks)
+        self._enqueue_callbacks(self._networks_updated, self.networks)  # sorted
 
     if block:
       worker()
