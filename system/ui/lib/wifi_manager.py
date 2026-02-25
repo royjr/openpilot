@@ -424,6 +424,7 @@ class WifiManager:
     # prev_state guard: real auth failures come from CONFIG (supplicant handshake).
     # Stale NEED_AUTH from a prior connection during network switching arrives with
     # prev_state=DISCONNECTED and must be ignored to avoid a false wrong-password callback.
+    # TODO: sometimes on PC it's observed no future signals are fired if mouse is held down blocking wrong password dialog
     elif ((new_state == NMDeviceState.NEED_AUTH and change_reason == NMDeviceStateReason.SUPPLICANT_DISCONNECT
            and prev_state == NMDeviceState.CONFIG) or
           (new_state == NMDeviceState.FAILED and change_reason == NMDeviceStateReason.NO_SECRETS)):
@@ -445,12 +446,12 @@ class WifiManager:
         cloudlog.warning("Failed to get active wifi connection during ACTIVATED state")
         self._wifi_state = wifi_state
         self._enqueue_callbacks(self._activated)
-        self._update_networks()
+        self._update_active_connection_info()
       else:
         wifi_state.ssid = next((s for s, p in self._connections.items() if p == conn_path), None)
         self._wifi_state = wifi_state
         self._enqueue_callbacks(self._activated)
-        self._update_networks()
+        self._update_active_connection_info()
 
         # Persist volatile connections (created by AddAndActivateConnection2) to disk
         conn_addr = DBusAddress(conn_path, bus_name=NM, interface=NM_CONNECTION_IFACE)
@@ -652,7 +653,6 @@ class WifiManager:
         conn_addr = DBusAddress(conn_path, bus_name=NM, interface=NM_CONNECTION_IFACE)
         self._router_main.send_and_get_reply(new_method_call(conn_addr, 'Delete'))
 
-      self._update_networks()
       self._enqueue_callbacks(self._forgotten, ssid)
 
     if block:
