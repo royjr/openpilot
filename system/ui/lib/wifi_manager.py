@@ -243,6 +243,7 @@ class WifiManager:
       if conn_path:
         ssid = next((s for s, p in self._connections.items() if p == conn_path), None)
 
+      # Discard if user acted during DBus calls
       if self._user_epoch != epoch:
         return
 
@@ -426,6 +427,7 @@ class WifiManager:
 
       conn_path, _ = self._get_active_wifi_connection(self._conn_monitor)
 
+      # Discard if user acted during DBus call
       if self._user_epoch != epoch:
         return
 
@@ -462,6 +464,7 @@ class WifiManager:
 
       conn_path, _ = self._get_active_wifi_connection(self._conn_monitor)
 
+      # Discard if user acted during DBus call
       if self._user_epoch != epoch:
         return
 
