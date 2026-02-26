@@ -394,7 +394,8 @@ class WifiManager:
     # on every user action. Handlers snapshot the epoch before their DBus call and compare
     # after: if it changed, a user action occurred during the call and the stale result is
     # discarded. Combined with deterministic fixes (skip DBus lookup when ssid already set,
-    # DEACTIVATING no-op, CONNECTION_REMOVED guard), all known race windows are closed.
+    # DEACTIVATING clears CONNECTED on CONNECTION_REMOVED, CONNECTION_REMOVED guard),
+    # all known race windows are closed.
 
     # TODO: Handle (FAILED, SSID_NOT_FOUND) and emit for UI to show error
     #  Happens when network drops off after starting connection
@@ -480,8 +481,12 @@ class WifiManager:
           cloudlog.warning(f"Failed to persist connection to disk: {save_reply}")
 
     elif new_state == NMDeviceState.DEACTIVATING:
-      # no-op — DISCONNECTED always follows with the correct reason
-      pass
+      # Must clear state when forgetting the currently connected network so the UI
+      # doesn't flash "connected" after the eager "forgetting..." state resets
+      # (the forgotten callback fires between DEACTIVATING and DISCONNECTED).
+      # Only clear CONNECTED — CONNECTING must be preserved for forget-A-connect-B.
+      if change_reason == NMDeviceStateReason.CONNECTION_REMOVED and self._wifi_state.status == ConnectStatus.CONNECTED:
+        self._set_connecting(None)
 
   def _network_scanner(self):
     while not self._exit:
