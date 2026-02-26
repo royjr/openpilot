@@ -374,40 +374,36 @@ class WifiManager:
           self._handle_state_change(new_state, previous_state, change_reason)
 
   def _handle_state_change(self, new_state: int, prev_state: int, change_reason: int):
-    # TODO: known race conditions when switching networks (e.g. forget A, connect to B):
-    # 1. DEACTIVATING/DISCONNECTED + CONNECTION_REMOVED: fires before NewConnection for B
-    #    arrives, so _set_connecting(None) clears B's CONNECTING state causing UI flicker.
-    #    DEACTIVATING(CONNECTION_REMOVED): wifi_state (B, CONNECTING) -> (None, DISCONNECTED)
-    #    Fix: make DEACTIVATING a no-op, and guard DISCONNECTED with
-    #    `if wifi_state.ssid not in _connections` (NewConnection arrives between the two).
-    # 2. PREPARE/CONFIG ssid lookup: DBus may return stale A's conn_path, overwriting B.
-    #    PREPARE(0): wifi_state (B, CONNECTING) -> (A, CONNECTING)
-    #    Fix: only do DBus lookup when wifi_state.ssid is None (auto-connections);
-    #    user-initiated connections already have ssid set via _set_connecting.
-
     # TODO: Thread safety — _wifi_state is read/written by both the monitor thread (this
     # handler) and the main thread (_set_connecting via connect/activate). The GIL makes
-    # individual assignments atomic, but read-then-write patterns can lose main thread writes:
-    #   PREPARE/CONFIG: reads _wifi_state, does slow DBus call, writes back — if
-    #   _set_connecting runs in between, the handler overwrites it with stale state.
-    #   This is both a deterministic bug (stale DBus data) and a thread race. The
-    #   deterministic fix (skip DBus lookup when ssid is set) also shrinks the race
-    #   window to near-zero since the read/write happen back-to-back under the GIL.
-    #   ACTIVATED: same read-then-write pattern with a DBus call in between.
-    # The deterministic fixes (skip DBus lookup when ssid set, prev_state guard) shrink
-    # the race windows significantly. If still visible, add a narrow lock around
-    # _wifi_state reads/writes (not around DBus calls, to avoid blocking the UI thread).
+    # individual assignments atomic, but ACTIVATED still has a read-then-write pattern with
+    # a DBus call in between: if _set_connecting runs mid-call, the handler overwrites it.
+    # The deterministic fixes (skip DBus lookup when ssid set, prev_state guard, DEACTIVATING
+    # no-op, CONNECTION_REMOVED guard) shrink the race windows significantly. If still
+    # visible, add a narrow lock around _wifi_state reads/writes (not around DBus calls).
 
-    # TODO: Handle (FAILED, SSID_NOT_FOUND) and emit for ui to show error
+    # TODO: Handle (FAILED, SSID_NOT_FOUND) and emit for UI to show error
     #  Happens when network drops off after starting connection
 
     if new_state == NMDeviceState.DISCONNECTED:
-      if change_reason != NMDeviceStateReason.NEW_ACTIVATION:
-        # catches CONNECTION_REMOVED reason when connection is forgotten
-        self._set_connecting(None)
+      if change_reason == NMDeviceStateReason.NEW_ACTIVATION:
+        return
+
+      # Guard: forget A while connecting to B fires CONNECTION_REMOVED. Don't clear B's state
+      # if B is still a known connection. If B hasn't arrived in _connections yet (late
+      # NewConnection), state clears here but PREPARE recovers via DBus lookup.
+      if (change_reason == NMDeviceStateReason.CONNECTION_REMOVED and self._wifi_state.ssid and
+        self._wifi_state.ssid in self._connections):
+        return
+
+      self._set_connecting(None)
 
     elif new_state in (NMDeviceState.PREPARE, NMDeviceState.CONFIG):
-      # Set connecting status when NetworkManager connects to known networks on its own
+      if self._wifi_state.ssid is not None:
+        self._wifi_state = replace(self._wifi_state, status=ConnectStatus.CONNECTING)
+        return
+
+      # Auto-connection when NetworkManager connects to known networks on its own (ssid=None): look up ssid from NM
       wifi_state = replace(self._wifi_state, status=ConnectStatus.CONNECTING)
 
       conn_path, _ = self._get_active_wifi_connection(self._conn_monitor)
@@ -444,25 +440,23 @@ class WifiManager:
       conn_path, _ = self._get_active_wifi_connection(self._conn_monitor)
       if conn_path is None:
         cloudlog.warning("Failed to get active wifi connection during ACTIVATED state")
-        self._wifi_state = wifi_state
-        self._enqueue_callbacks(self._activated)
-        self._update_active_connection_info()
       else:
         wifi_state.ssid = next((s for s, p in self._connections.items() if p == conn_path), None)
-        self._wifi_state = wifi_state
-        self._enqueue_callbacks(self._activated)
-        self._update_active_connection_info()
 
-        # Persist volatile connections (created by AddAndActivateConnection2) to disk
+      self._wifi_state = wifi_state
+      self._enqueue_callbacks(self._activated)
+      self._update_active_connection_info()
+
+      # Persist volatile connections (created by AddAndActivateConnection2) to disk
+      if conn_path is not None:
         conn_addr = DBusAddress(conn_path, bus_name=NM, interface=NM_CONNECTION_IFACE)
         save_reply = self._conn_monitor.send_and_get_reply(new_method_call(conn_addr, 'Save'))
         if save_reply.header.message_type == MessageType.error:
           cloudlog.warning(f"Failed to persist connection to disk: {save_reply}")
 
     elif new_state == NMDeviceState.DEACTIVATING:
-      if change_reason == NMDeviceStateReason.CONNECTION_REMOVED:
-        # When connection is forgotten
-        self._set_connecting(None)
+      # no-op — DISCONNECTED always follows with the correct reason
+      pass
 
   def _network_scanner(self):
     while not self._exit:

@@ -3,8 +3,8 @@
 Tests the state machine in isolation by constructing a WifiManager with mocked
 DBus, then calling _handle_state_change directly with NM state transitions.
 
-Many tests assert *desired* behavior that the current code doesn't implement yet.
-These are marked with pytest.mark.xfail and document the intended fix.
+Remaining xfail tests cover thread races (monitor vs main thread) and deferred
+features (SSID_NOT_FOUND UI error).
 """
 import pytest
 from pytest_mock import MockerFixture
@@ -72,7 +72,6 @@ class TestDisconnected:
     assert wm._wifi_state.ssid == "OldNet"
     assert wm._wifi_state.status == ConnectStatus.CONNECTED
 
-  @pytest.mark.xfail(reason="TODO: CONNECTION_REMOVED should only clear if ssid not in _connections")
   def test_connection_removed_keeps_other_connecting(self, mocker):
     """Forget A while connecting to B: CONNECTION_REMOVED for A must not clear B."""
     wm = _make_wm(mocker, connections={"B": "/path/B"})
@@ -95,12 +94,8 @@ class TestDisconnected:
 
 
 class TestDeactivating:
-  @pytest.mark.xfail(reason="TODO: DEACTIVATING should be a no-op")
   def test_deactivating_is_noop(self, mocker):
-    """DEACTIVATING should be a no-op — DISCONNECTED follows with correct state.
-
-    Fix: remove the entire DEACTIVATING elif block — do nothing for any reason.
-    """
+    """DEACTIVATING is a no-op — DISCONNECTED follows with the correct reason."""
     wm = _make_wm(mocker)
     wm._wifi_state = WifiState(ssid="Net", status=ConnectStatus.CONNECTED)
 
@@ -111,7 +106,6 @@ class TestDeactivating:
 
 
 class TestPrepareConfig:
-  @pytest.mark.xfail(reason="TODO: should skip DBus lookup when ssid already set")
   def test_user_initiated_skips_dbus_lookup(self, mocker):
     """User called _set_connecting('B') — PREPARE must not overwrite via DBus.
 
@@ -309,9 +303,9 @@ class TestActivated:
 # Uses side_effect on the DBus mock to simulate _set_connecting running mid-handler.
 # ---------------------------------------------------------------------------
 # The deterministic fixes (skip DBus lookup when ssid already set, prev_state guard
-# on NEED_AUTH) also shrink these race windows to near-zero. If races are still
-# visible after, make WifiState frozen (replace() + single atomic assignment) and/or
-# add a narrow lock around _wifi_state reads/writes (not around DBus calls).
+# on NEED_AUTH, DEACTIVATING no-op, CONNECTION_REMOVED guard) shrink these race
+# windows to near-zero. If still visible, make WifiState frozen (replace() + single
+# atomic assignment) and/or add a narrow lock around _wifi_state reads/writes.
 
 class TestThreadRaces:
   @pytest.mark.xfail(reason="TODO: PREPARE overwrites _set_connecting via stale DBus lookup")
@@ -496,7 +490,6 @@ class TestFullSequences:
     fire_wpa_connect(wm)
     assert wm._wifi_state.status == ConnectStatus.CONNECTED
 
-  @pytest.mark.xfail(reason="TODO: forget A while connecting to B should not clear B")
   def test_forget_A_connect_B(self, mocker):
     """Forget A while connecting to B: full signal sequence.
 
@@ -508,7 +501,7 @@ class TestFullSequences:
     Signal order:
       1. User: _set_connecting("B"), forget("A") removes A from _connections
       2. NewConnection for B arrives → _connections["B"] = ...
-      3. DEACTIVATING(CONNECTION_REMOVED) — should be no-op
+      3. DEACTIVATING(CONNECTION_REMOVED) — no-op
       4. DISCONNECTED(CONNECTION_REMOVED) — B is in _connections, must not clear
       5. PREPARE → CONFIG → NEED_AUTH → PREPARE → CONFIG → ... → ACTIVATED
     """
@@ -536,7 +529,6 @@ class TestFullSequences:
     assert wm._wifi_state.status == ConnectStatus.CONNECTED
     assert wm._wifi_state.ssid == "B"
 
-  @pytest.mark.xfail(reason="TODO: forget A while connecting to B should not clear B")
   def test_forget_A_connect_B_late_new_connection(self, mocker):
     """Forget A, connect B: NewConnection for B arrives AFTER DISCONNECTED.
 
