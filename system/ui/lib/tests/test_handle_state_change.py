@@ -2,9 +2,6 @@
 
 Tests the state machine in isolation by constructing a WifiManager with mocked
 DBus, then calling _handle_state_change directly with NM state transitions.
-
-Remaining xfail tests cover thread races (monitor vs main thread) and deferred
-features (SSID_NOT_FOUND UI error).
 """
 import pytest
 from jeepney.low_level import MessageType
@@ -22,6 +19,7 @@ def _make_wm(mocker: MockerFixture, connections=None):
   wm._conn_monitor = mocker.MagicMock()
   wm._connections = dict(connections or {})
   wm._wifi_state = WifiState()
+  wm._user_epoch = 0
   wm._callback_queue = []
   wm._need_auth = []
   wm._activated = []
@@ -302,14 +300,14 @@ class TestActivated:
 # ---------------------------------------------------------------------------
 # Thread races: _set_connecting on main thread vs _handle_state_change on monitor thread.
 # Uses side_effect on the DBus mock to simulate _set_connecting running mid-handler.
+# The epoch counter detects that a user action occurred during the slow DBus call
+# and discards the stale update.
 # ---------------------------------------------------------------------------
 # The deterministic fixes (skip DBus lookup when ssid already set, prev_state guard
 # on NEED_AUTH, DEACTIVATING no-op, CONNECTION_REMOVED guard) shrink these race
-# windows to near-zero. If still visible, make WifiState frozen (replace() + single
-# atomic assignment) and/or add a narrow lock around _wifi_state reads/writes.
+# windows significantly. The epoch counter closes the remaining gaps.
 
 class TestThreadRaces:
-  @pytest.mark.xfail(reason="TODO: PREPARE overwrites _set_connecting via stale DBus lookup")
   def test_prepare_race_user_tap_during_dbus(self, mocker):
     """User taps B while PREPARE's DBus call is in flight for auto-connect.
 
@@ -329,7 +327,6 @@ class TestThreadRaces:
     assert wm._wifi_state.ssid == "B"
     assert wm._wifi_state.status == ConnectStatus.CONNECTING
 
-  @pytest.mark.xfail(reason="TODO: ACTIVATED overwrites _set_connecting with stale CONNECTED state")
   def test_activated_race_user_tap_during_dbus(self, mocker):
     """User taps B right as A finishes connecting (ACTIVATED handler running).
 

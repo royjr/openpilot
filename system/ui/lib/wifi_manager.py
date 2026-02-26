@@ -175,6 +175,7 @@ class WifiManager:
     # State
     self._connections: dict[str, str] = {}  # ssid -> connection path, updated via NM signals
     self._wifi_state: WifiState = WifiState()
+    self._user_epoch: int = 0
     self._ipv4_address: str = ""
     self._current_network_metered: MeteredType = MeteredType.UNKNOWN
     self._tethering_password: str = ""
@@ -291,6 +292,8 @@ class WifiManager:
     return self._tethering_password
 
   def _set_connecting(self, ssid: str | None):
+    # Called by user action, or sequentially from state change handler
+    self._user_epoch += 1
     self._wifi_state = WifiState(ssid=ssid, status=ConnectStatus.DISCONNECTED if ssid is None else ConnectStatus.CONNECTING)
 
   def _enqueue_callbacks(self, cbs: list[Callable], *args):
@@ -374,13 +377,16 @@ class WifiManager:
           self._handle_state_change(new_state, previous_state, change_reason)
 
   def _handle_state_change(self, new_state: int, prev_state: int, change_reason: int):
-    # TODO: Thread safety — _wifi_state is read/written by both the monitor thread (this
-    # handler) and the main thread (_set_connecting via connect/activate). The GIL makes
-    # individual assignments atomic, but ACTIVATED still has a read-then-write pattern with
-    # a DBus call in between: if _set_connecting runs mid-call, the handler overwrites it.
-    # The deterministic fixes (skip DBus lookup when ssid set, prev_state guard, DEACTIVATING
-    # no-op, CONNECTION_REMOVED guard) shrink the race windows significantly. If still
-    # visible, add a narrow lock around _wifi_state reads/writes (not around DBus calls).
+    # Thread safety: _wifi_state is read/written by both the monitor thread (this handler)
+    # and the main thread (_set_connecting via connect/activate). PREPARE/CONFIG and ACTIVATED
+    # have a read-then-write pattern with a slow DBus call in between — if _set_connecting
+    # runs mid-call, the handler would overwrite the user's newer state with stale data.
+    #
+    # The _user_epoch counter solves this without locks. _set_connecting increments the epoch
+    # on every user action. Handlers snapshot the epoch before their DBus call and compare
+    # after: if it changed, a user action occurred during the call and the stale result is
+    # discarded. Combined with deterministic fixes (skip DBus lookup when ssid already set,
+    # DEACTIVATING no-op, CONNECTION_REMOVED guard), all known race windows are closed.
 
     # TODO: Handle (FAILED, SSID_NOT_FOUND) and emit for UI to show error
     #  Happens when network drops off after starting connection
@@ -399,6 +405,8 @@ class WifiManager:
       self._set_connecting(None)
 
     elif new_state in (NMDeviceState.PREPARE, NMDeviceState.CONFIG):
+      epoch = self._user_epoch
+
       if self._wifi_state.ssid is not None:
         self._wifi_state = replace(self._wifi_state, status=ConnectStatus.CONNECTING)
         return
@@ -407,6 +415,10 @@ class WifiManager:
       wifi_state = replace(self._wifi_state, status=ConnectStatus.CONNECTING)
 
       conn_path, _ = self._get_active_wifi_connection(self._conn_monitor)
+
+      if self._user_epoch != epoch:
+        return
+
       if conn_path is None:
         cloudlog.warning("Failed to get active wifi connection during PREPARE/CONFIG state")
       else:
@@ -417,14 +429,14 @@ class WifiManager:
     # BAD PASSWORD
     # - strong network rejects with NEED_AUTH+SUPPLICANT_DISCONNECT
     # - weak/gone network fails with FAILED+NO_SECRETS
-    # prev_state guard: real auth failures come from CONFIG (supplicant handshake).
-    # Stale NEED_AUTH from a prior connection during network switching arrives with
-    # prev_state=DISCONNECTED and must be ignored to avoid a false wrong-password callback.
     # TODO: sometimes on PC it's observed no future signals are fired if mouse is held down blocking wrong password dialog
     elif ((new_state == NMDeviceState.NEED_AUTH and change_reason == NMDeviceStateReason.SUPPLICANT_DISCONNECT
            and prev_state == NMDeviceState.CONFIG) or
           (new_state == NMDeviceState.FAILED and change_reason == NMDeviceStateReason.NO_SECRETS)):
 
+      # prev_state guard: real auth failures come from CONFIG (supplicant handshake).
+      # Stale NEED_AUTH from a prior connection during network switching arrives with
+      # prev_state=DISCONNECTED and must be ignored to avoid a false wrong-password callback.
       if self._wifi_state.ssid:
         self._enqueue_callbacks(self._need_auth, self._wifi_state.ssid)
         self._set_connecting(None)
@@ -435,9 +447,14 @@ class WifiManager:
 
     elif new_state == NMDeviceState.ACTIVATED:
       # Note that IP address from Ip4Config may not be propagated immediately and could take until the next scan results
+      epoch = self._user_epoch
       wifi_state = replace(self._wifi_state, status=ConnectStatus.CONNECTED)
 
       conn_path, _ = self._get_active_wifi_connection(self._conn_monitor)
+
+      if self._user_epoch != epoch:
+        return
+
       if conn_path is None:
         cloudlog.warning("Failed to get active wifi connection during ACTIVATED state")
       else:
