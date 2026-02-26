@@ -197,7 +197,7 @@ class WifiManager:
     self._networks_updated: list[Callable[[list[Network]], None]] = []
     self._disconnected: list[Callable[[], None]] = []
 
-    self._lock = threading.Lock()
+    self._scan_lock = threading.Lock()
     self._scan_thread = threading.Thread(target=self._network_scanner, daemon=True)
     self._state_thread = threading.Thread(target=self._monitor_state, daemon=True)
     self._initialize()
@@ -227,6 +227,8 @@ class WifiManager:
         cloudlog.warning("No WiFi device found")
         return
 
+      epoch = self._user_epoch
+
       dev_addr = DBusAddress(self._wifi_device, bus_name=NM, interface=NM_DEVICE_IFACE)
       dev_state = self._router_main.send_and_get_reply(Properties(dev_addr).get('State')).body[0][1]
 
@@ -239,6 +241,10 @@ class WifiManager:
       conn_path, _ = self._get_active_wifi_connection()
       if conn_path:
         wifi_state.ssid = next((s for s, p in self._connections.items() if p == conn_path), None)
+
+      if self._user_epoch != epoch:
+        return
+
       self._wifi_state = wifi_state
 
     if block:
@@ -281,11 +287,13 @@ class WifiManager:
 
   @property
   def connecting_to_ssid(self) -> str | None:
-    return self._wifi_state.ssid if self._wifi_state.status == ConnectStatus.CONNECTING else None
+    wifi_state = self._wifi_state
+    return wifi_state.ssid if wifi_state.status == ConnectStatus.CONNECTING else None
 
   @property
   def connected_ssid(self) -> str | None:
-    return self._wifi_state.ssid if self._wifi_state.status == ConnectStatus.CONNECTED else None
+    wifi_state = self._wifi_state
+    return wifi_state.ssid if wifi_state.status == ConnectStatus.CONNECTED else None
 
   @property
   def tethering_password(self) -> str:
@@ -822,7 +830,7 @@ class WifiManager:
       return
 
     def worker():
-      with self._lock:
+      with self._scan_lock:
         if self._wifi_device is None:
           cloudlog.warning("No WiFi device found")
           return
