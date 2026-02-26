@@ -227,9 +227,9 @@ class WifiButton(BigButton):
       if self._network_forgetting:
         self.set_value("forgetting...")
       elif self._is_connecting:
-        self.set_value("connecting...")
+        self.set_value("starting..." if self._network.is_tethering else "connecting...")
       elif self._is_connected:
-        self.set_value("connected")
+        self.set_value("tethering" if self._network.is_tethering else "connected")
       elif self._network_missing:
         # after connecting/connected since NM will still attempt to connect/stay connected for a while
         self.set_value("not in range")
