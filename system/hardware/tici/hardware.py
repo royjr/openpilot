@@ -456,13 +456,8 @@ class Tici(HardwareBase):
   def configure_modem(self):
     sim_id = self.get_sim_info().get('sim_id', '')
 
-    modem = self.get_modem()
-    try:
-      manufacturer = str(modem.Get(MM_MODEM, 'Manufacturer', dbus_interface=DBUS_PROPS, timeout=TIMEOUT))
-    except Exception:
-      manufacturer = None
-
     cmds = []
+    modem = self.get_modem()
 
     # Quectel EG25
     if self.get_device_type() in ("tizi", ):
