@@ -109,8 +109,7 @@ class Scroller(Widget):
     self._pending_lift: set[Widget] = set()
     self._pending_move: set[Widget] = set()
 
-    for item in items:
-      self.add_widget(item)
+    self.add_widgets(items)
 
   def set_reset_scroll_at_show(self, scroll: bool):
     self._reset_scroll_at_show = scroll
@@ -150,6 +149,10 @@ class Scroller(Widget):
     item.set_touch_valid_callback(lambda: self.scroll_panel.is_touch_valid() and self.enabled and self._scrolling_to[0] is None
                                           and not self.moving_items and (original_touch_valid_callback() if
                                                                          original_touch_valid_callback else True))
+
+  def add_widgets(self, items: list[Widget]) -> None:
+    for item in items:
+      self.add_widget(item)
 
   def set_scrolling_enabled(self, enabled: bool | Callable[[], bool]) -> None:
     """Set whether scrolling is enabled (does not affect widget enabled state)."""
