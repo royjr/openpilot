@@ -80,6 +80,8 @@ QSize MessageBytesDelegate::sizeHint(const QStyleOptionViewItem &option, const Q
 void MessageBytesDelegate::paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const {
   if (option.state & QStyle::State_Selected) {
     painter->fillRect(option.rect, option.palette.brush(QPalette::Normal, QPalette::Highlight));
+  } else if (auto background = index.data(Qt::BackgroundRole).value<QBrush>(); background.style() != Qt::NoBrush) {
+    painter->fillRect(option.rect, background);
   }
 
   QRect item_rect = option.rect.adjusted(h_margin, v_margin, -h_margin, -v_margin);
@@ -105,12 +107,14 @@ void MessageBytesDelegate::paint(QPainter *painter, const QStyleOptionViewItem &
   painter->setFont(fixed_font);
   const QPen text_pen(option.state & QStyle::State_Selected ? highlighted_color : text_color);
   const QPoint pt = item_rect.topLeft();
+  const bool has_row_background = !(option.state & QStyle::State_Selected)
+                                  && index.data(Qt::BackgroundRole).value<QBrush>().style() != Qt::NoBrush;
   for (int i = 0; i < bytes.size(); ++i) {
     int row = !multiple_lines ? 0 : i / 8;
     int column = !multiple_lines ? i : i % 8;
     QRect r({pt.x() + column * byte_size.width(), pt.y() + row * byte_size.height()}, byte_size);
 
-    if (!inactive && i < colors.size() && colors[i].alpha() > 0) {
+    if (!has_row_background && !inactive && i < colors.size() && colors[i].alpha() > 0) {
       if (option.state & QStyle::State_Selected) {
         painter->setPen(option.palette.color(QPalette::Text));
         painter->fillRect(r, option.palette.color(QPalette::Window));

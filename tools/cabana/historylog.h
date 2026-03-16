@@ -1,6 +1,7 @@
 #pragma once
 
 #include <deque>
+#include <optional>
 #include <vector>
 
 #include <QComboBox>
@@ -41,6 +42,7 @@ public:
     std::vector<double> sig_values;
     std::vector<uint8_t> data;
     std::vector<QColor> colors;
+    bool missing_counter = false;
   };
 
   void fetchData(std::deque<Message>::iterator insert_pos, uint64_t from_time, uint64_t min_time);
@@ -54,6 +56,14 @@ public:
   std::deque<Message> messages;
   std::vector<cabana::Signal *> sigs;
   bool hex_mode = false;
+
+private:
+  int counterSignalIndex() const;
+  int checksumSignalIndex() const;
+  bool hasImmediateDuplicateCounter(int row) const;
+  std::optional<bool> checksumValid(int row) const;
+  const Message *firstActualMessage() const;
+  const Message *lastActualMessage() const;
 };
 
 class LogsWidget : public QFrame {

@@ -1,5 +1,8 @@
 #include "tools/cabana/historylog.h"
 
+#include <algorithm>
+#include <array>
+#include <cmath>
 #include <functional>
 
 #include <QFileDialog>
@@ -9,14 +12,74 @@
 #include "tools/cabana/commands.h"
 #include "tools/cabana/utils/export.h"
 
+namespace {
+
+const std::array<uint16_t, 256> &crc16XmodemTable() {
+  static const std::array<uint16_t, 256> table = [] {
+    std::array<uint16_t, 256> lut = {};
+    for (int i = 0; i < lut.size(); ++i) {
+      uint16_t crc = i << 8;
+      for (int bit = 0; bit < 8; ++bit) {
+        crc = (crc & 0x8000) ? ((crc << 1) ^ 0x1021) : (crc << 1);
+      }
+      lut[i] = crc;
+    }
+    return lut;
+  }();
+  return table;
+}
+
+uint16_t hkgCanFdChecksum(uint32_t address, const std::vector<uint8_t> &data) {
+  uint16_t crc = 0;
+  const auto &lut = crc16XmodemTable();
+  for (int i = 2; i < data.size(); ++i) {
+    crc = ((crc << 8) ^ lut[(crc >> 8) ^ data[i]]) & 0xFFFF;
+  }
+  crc = ((crc << 8) ^ lut[(crc >> 8) ^ (address & 0xFF)]) & 0xFFFF;
+  crc = ((crc << 8) ^ lut[(crc >> 8) ^ ((address >> 8) & 0xFF)]) & 0xFFFF;
+  switch (data.size()) {
+    case 8: crc ^= 0x5F29; break;
+    case 16: crc ^= 0x041D; break;
+    case 24: crc ^= 0x819D; break;
+    case 32: crc ^= 0x9F5B; break;
+    default: break;
+  }
+  return crc;
+}
+
+}  // namespace
+
 QVariant HistoryLogModel::data(const QModelIndex &index, int role) const {
+  if (!index.isValid() || index.row() >= messages.size()) return {};
+
   const auto &m = messages[index.row()];
   const int col = index.column();
+  const int checksum_idx = checksumSignalIndex();
+  const bool checksum_col = !isHexMode() && col > 0 && (col - 1) == checksum_idx;
+  const auto checksum_valid = checksum_col ? checksumValid(index.row()) : std::optional<bool>{};
+  if (m.missing_counter) {
+    if (role == Qt::BackgroundRole) return QBrush(QColor(255, 255, 0, 96));
+    if (role == Qt::TextAlignmentRole) return (uint32_t)(Qt::AlignRight | Qt::AlignVCenter);
+    return {};
+  }
+
   if (role == Qt::DisplayRole) {
     if (col == 0) return QString::number(can->toSeconds(m.mono_time), 'f', 3);
-    if (!isHexMode()) return QString::fromStdString(sigs[col - 1]->formatValue(m.sig_values[col - 1], false));
+    if (!isHexMode()) {
+      QString value = QString::fromStdString(sigs[col - 1]->formatValue(m.sig_values[col - 1], false));
+      if (checksum_col && checksum_valid.has_value()) {
+        return QString("%1 %2").arg(*checksum_valid ? QString::fromUtf8("\xE2\x9C\x93") : "x", value);
+      }
+      return value;
+    }
   } else if (role == Qt::TextAlignmentRole) {
     return (uint32_t)(Qt::AlignRight | Qt::AlignVCenter);
+  } else if (role == Qt::ForegroundRole && checksum_col && checksum_valid.has_value()) {
+    return QColor(Qt::black);
+  } else if (role == Qt::BackgroundRole && checksum_col && checksum_valid.has_value()) {
+    return QBrush(*checksum_valid ? QColor(0, 255, 0, 96) : QColor(255, 0, 0, 96));
+  } else if (role == Qt::BackgroundRole && hasImmediateDuplicateCounter(index.row())) {
+    return QBrush(QColor(255, 0, 0, 96));
   }
 
   if (isHexMode() && col == 1) {
@@ -24,6 +87,52 @@ QVariant HistoryLogModel::data(const QModelIndex &index, int role) const {
     if (role == BytesRole) return QVariant::fromValue((void *)(&m.data));
   }
   return {};
+}
+
+int HistoryLogModel::counterSignalIndex() const {
+  auto it = std::find_if(sigs.cbegin(), sigs.cend(), [](const auto *sig) {
+    return QString::compare(QString::fromStdString(sig->name), "counter", Qt::CaseInsensitive) == 0;
+  });
+  return it != sigs.cend() ? std::distance(sigs.cbegin(), it) : -1;
+}
+
+int HistoryLogModel::checksumSignalIndex() const {
+  auto it = std::find_if(sigs.cbegin(), sigs.cend(), [](const auto *sig) {
+    return QString::compare(QString::fromStdString(sig->name), "checksum", Qt::CaseInsensitive) == 0;
+  });
+  return it != sigs.cend() ? std::distance(sigs.cbegin(), it) : -1;
+}
+
+bool HistoryLogModel::hasImmediateDuplicateCounter(int row) const {
+  const int counter_idx = counterSignalIndex();
+  if (counter_idx < 0 || row <= 0 || row >= messages.size()) return false;
+  if (messages[row].missing_counter || messages[row - 1].missing_counter) return false;
+  return messages[row].sig_values[counter_idx] == messages[row - 1].sig_values[counter_idx];
+}
+
+std::optional<bool> HistoryLogModel::checksumValid(int row) const {
+  const int checksum_idx = checksumSignalIndex();
+  if (checksum_idx < 0 || row < 0 || row >= messages.size()) return std::nullopt;
+
+  const auto &message = messages[row];
+  if (message.missing_counter || message.data.empty()) return std::nullopt;
+
+  const long long checksum = std::llround(message.sig_values[checksum_idx]);
+  if (checksum < 0 || checksum > 0xFFFF) return std::nullopt;
+  if (message.data.size() != 8 && message.data.size() != 16 && message.data.size() != 24 && message.data.size() != 32) {
+    return std::nullopt;
+  }
+  return static_cast<uint16_t>(checksum) == hkgCanFdChecksum(msg_id.address, message.data);
+}
+
+const HistoryLogModel::Message *HistoryLogModel::firstActualMessage() const {
+  auto it = std::find_if(messages.cbegin(), messages.cend(), [](const auto &message) { return !message.missing_counter; });
+  return it != messages.cend() ? &(*it) : nullptr;
+}
+
+const HistoryLogModel::Message *HistoryLogModel::lastActualMessage() const {
+  auto it = std::find_if(messages.crbegin(), messages.crend(), [](const auto &message) { return !message.missing_counter; });
+  return it != messages.crend() ? &(*it) : nullptr;
 }
 
 void HistoryLogModel::setMessage(const MessageId &message_id) {
@@ -81,46 +190,100 @@ void HistoryLogModel::updateState(bool clear) {
     endRemoveRows();
   }
   uint64_t current_time = can->toMonoTime(can->lastMessage(msg_id).ts) + 1;
-  fetchData(messages.begin(), current_time, messages.empty() ? 0 : messages.front().mono_time);
+  fetchData(messages.begin(), current_time, firstActualMessage() ? firstActualMessage()->mono_time : 0);
 }
 
 bool HistoryLogModel::canFetchMore(const QModelIndex &parent) const {
   const auto &events = can->events(msg_id);
-  return !events.empty() && !messages.empty() && messages.back().mono_time > events.front()->mono_time;
+  const Message *last_actual = lastActualMessage();
+  return !events.empty() && last_actual && last_actual->mono_time > events.front()->mono_time;
 }
 
 void HistoryLogModel::fetchMore(const QModelIndex &parent) {
-  if (!messages.empty())
-    fetchData(messages.end(), messages.back().mono_time, 0);
+  if (const Message *last_actual = lastActualMessage()) {
+    fetchData(messages.end(), last_actual->mono_time, 0);
+  }
 }
 
 void HistoryLogModel::fetchData(std::deque<Message>::iterator insert_pos, uint64_t from_time, uint64_t min_time) {
+  auto isIntegerValue = [](double value) {
+    return std::isfinite(value) && std::fabs(value - std::llround(value)) < 1e-6;
+  };
+  auto buildMissingRows = [&](const Message &prev, const Message &next) {
+    std::vector<Message> gap_rows;
+    const int counter_idx = counterSignalIndex();
+    if (counter_idx < 0 || prev.missing_counter || next.missing_counter) return gap_rows;
+
+    const double prev_value = prev.sig_values[counter_idx];
+    const double next_value = next.sig_values[counter_idx];
+    if (!isIntegerValue(prev_value) || !isIntegerValue(next_value)) return gap_rows;
+
+    const long long prev_counter = std::llround(prev_value);
+    const long long next_counter = std::llround(next_value);
+    if (prev_counter < 0 || prev_counter > 255 || next_counter < 0 || next_counter > 255) return gap_rows;
+
+    const int forward_distance = (static_cast<int>(next_counter) - static_cast<int>(prev_counter) + 256) % 256;
+    const int backward_distance = (static_cast<int>(prev_counter) - static_cast<int>(next_counter) + 256) % 256;
+    const int step = forward_distance <= backward_distance ? 1 : -1;
+    const int missing_count = std::min(forward_distance, backward_distance) - 1;
+    if (missing_count <= 0) return gap_rows;
+
+    int missing = static_cast<int>(prev_counter);
+    for (int i = 0; i < missing_count; ++i) {
+      missing = (missing + step + 256) % 256;
+      gap_rows.emplace_back(Message{.missing_counter = true});
+    }
+    return gap_rows;
+  };
+
   const auto &events = can->events(msg_id);
   auto first = std::upper_bound(events.rbegin(), events.rend(), from_time, [](uint64_t ts, auto e) {
     return ts > e->mono_time;
   });
 
-  std::vector<HistoryLogModel::Message> msgs;
+  std::vector<HistoryLogModel::Message> actual_msgs;
   std::vector<double> values(sigs.size());
-  msgs.reserve(batch_size);
+  actual_msgs.reserve(batch_size);
   for (; first != events.rend() && (*first)->mono_time > min_time; ++first) {
     const CanEvent *e = *first;
     for (int i = 0; i < sigs.size(); ++i) {
       sigs[i]->getValue(e->dat, e->size, &values[i]);
     }
     if (!filter_cmp || filter_cmp(values[filter_sig_idx], filter_value)) {
-       msgs.emplace_back(Message{e->mono_time, values, {e->dat, e->dat + e->size}});
-      if (msgs.size() >= batch_size && min_time == 0) {
+      actual_msgs.emplace_back(Message{e->mono_time, values, {e->dat, e->dat + e->size}});
+      if (actual_msgs.size() >= batch_size && min_time == 0) {
         break;
       }
     }
   }
 
-  if (!msgs.empty()) {
+  if (!actual_msgs.empty()) {
+    std::vector<HistoryLogModel::Message> msgs;
+    msgs.reserve(actual_msgs.size());
+    if (insert_pos != messages.begin()) {
+      if (const Message *prev_actual = lastActualMessage()) {
+        auto gap_rows = buildMissingRows(*prev_actual, actual_msgs.front());
+        msgs.insert(msgs.end(), std::make_move_iterator(gap_rows.begin()), std::make_move_iterator(gap_rows.end()));
+      }
+    }
+    msgs.push_back(actual_msgs.front());
+    for (int i = 1; i < actual_msgs.size(); ++i) {
+      auto gap_rows = buildMissingRows(actual_msgs[i - 1], actual_msgs[i]);
+      msgs.insert(msgs.end(), std::make_move_iterator(gap_rows.begin()), std::make_move_iterator(gap_rows.end()));
+      msgs.push_back(actual_msgs[i]);
+    }
+    if (insert_pos != messages.end()) {
+      if (const Message *next_actual = firstActualMessage()) {
+        auto gap_rows = buildMissingRows(actual_msgs.back(), *next_actual);
+        msgs.insert(msgs.end(), std::make_move_iterator(gap_rows.begin()), std::make_move_iterator(gap_rows.end()));
+      }
+    }
+
     if (isHexMode() && (min_time > 0 || messages.empty())) {
       const auto freq = can->lastMessage(msg_id).freq;
       const std::vector<uint8_t> no_mask;
       for (auto &m : msgs) {
+        if (m.missing_counter) continue;
         hex_colors.compute(msg_id, m.data.data(), m.data.size(), m.mono_time / (double)1e9, can->getSpeed(), no_mask, freq);
         m.colors = hex_colors.colors;
       }
