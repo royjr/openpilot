@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
 import argparse
-import math
 import os
 import sys
-import tempfile
 from dataclasses import dataclass
 
 import cv2
@@ -11,7 +9,6 @@ import numpy as np
 import pyray as rl
 
 import cereal.messaging as messaging
-from opendbc.can.parser import CANParser
 from openpilot.common.basedir import BASEDIR
 from openpilot.common.transformations.camera import DEVICE_CAMERAS
 from openpilot.tools.replay.lib.ui_helpers import (
@@ -26,58 +23,26 @@ from openpilot.tools.replay.lib.ui_helpers import (
   plot_model,
   to_topdown_pt,
 )
+from openpilot.tools.replay.radar_helpers import (
+  RADAR_SPECS,
+  build_seen_address_map,
+  decode_radar_track,
+  get_radar_can_parser,
+  get_radar_spec,
+  get_track_storage_key,
+  get_track_ts_nanos,
+  is_exclusive_full_range_match,
+)
 from openpilot.selfdrive.controls.radard import RADAR_TO_CAMERA
 from msgq.visionipc import VisionIpcClient, VisionStreamType
 
 os.environ['BASEDIR'] = BASEDIR
 
 ANGLE_SCALE = 5.0
-RADAR_500_51F_ADDR = 0x500
-RADAR_500_51F_COUNT = 32
-RADAR_602_611_ADDR = 0x602
-RADAR_602_611_COUNT = 16
-RADAR_210_21F_ADDR = 0x210
-RADAR_210_21F_COUNT = 16
-RADAR_3A5_3C4_ADDR = 0x3A5
-RADAR_3A5_3C4_COUNT = 32
-RADAR_3A5_3C4_TRACK_LEN = 24
 RADAR_TRACK_TIMEOUT_FRAMES = 10
 RADAR_FORMAT_SWITCH_MISS_FRAMES = 30
 RADAR_TRACK_RADIUS = 4
 CAMERA_RADAR_Y_OFFSET = 25
-RADAR_500_51F_DBC_TEMPLATE = """
-BO_ {addr_dec} RADAR_TRACK_{addr_hex}: 8 RADAR
- SG_ UNKNOWN_1 : 7|8@0- (1,0) [-128|127] "" XXX
- SG_ AZIMUTH : 12|10@0- (0.2,0) [-102.4|102.2] "" XXX
- SG_ STATE : 15|3@0+ (1,0) [0|7] "" XXX
- SG_ LONG_DIST : 18|11@0+ (0.1,0) [0|204.7] "" XXX
- SG_ REL_ACCEL : 33|10@0- (0.02,0) [-10.24|10.22] "" XXX
- SG_ ZEROS : 37|4@0+ (1,0) [0|255] "" XXX
- SG_ COUNTER : 38|1@0+ (1,0) [0|1] "" XXX
- SG_ STATE_3 : 39|1@0+ (1,0) [0|1] "" XXX
- SG_ REL_SPEED : 53|14@0- (0.01,0) [-81.92|81.92] "" XXX
- SG_ STATE_2 : 55|2@0+ (1,0) [0|3] "" XXX
-"""
-RADAR_3A5_3C4_DBC_TEMPLATE = """
-BO_ {addr_dec} RADAR_TRACK_{addr_hex}: 24 RADAR
- SG_ CHECKSUM : 0|16@1+ (1,0) [0|65535] "" XXX
- SG_ COUNTER : 16|8@1+ (1,0) [0|255] "" XXX
- SG_ NEW_SIGNAL_1 : 25|2@0+ (1,0) [0|3] "" XXX
- SG_ NEW_SIGNAL_3 : 28|2@0+ (1,0) [0|3] "" XXX
- SG_ COUNTER_3 : 31|2@0+ (1,0) [0|3] "" XXX
- SG_ NEW_SIGNAL_2 : 38|7@0- (1,0) [0|127] "" XXX
- SG_ COUNTER_256 : 47|8@0+ (1,0) [0|255] "" XXX
- SG_ NEW_SIGNAL_6 : 51|4@0+ (1,0) [0|15] "" XXX
- SG_ STATE : 54|3@0+ (1,0) [0|7] "" XXX
- SG_ NEW_SIGNAL_8 : 62|7@0- (1,0) [0|127] "" XXX
- SG_ LONG_DIST : 63|12@1+ (0.05,0) [0|8191] "m" XXX
- SG_ LAT_DIST : 76|12@1- (0.05,0) [0|127] "" XXX
- SG_ REL_SPEED : 88|14@1- (0.01,0) [0|16383] "" XXX
- SG_ NEW_SIGNAL_4 : 103|2@0+ (1,0) [0|3] "" XXX
- SG_ LAT_DIST_ACCEL : 104|13@1- (1,0) [0|8191] "" XXX
- SG_ REL_ACCEL : 118|10@1- (0.02,0) [0|1023] "" XXX
- SG_ NEW_SIGNAL_5 : 133|4@0+ (1,0) [0|15] "" XXX
-"""
 
 
 @dataclass
@@ -89,113 +54,6 @@ class RadarTrackPoint:
   vRel: float = 0.0
   aRel: float = 0.0
   yvRel: float = float("nan")
-
-
-@dataclass(frozen=True)
-class RadarFormat:
-  name: str
-  start_addr: int
-  msg_count: int
-  dbc_template: str
-  track_prefixes: tuple[str, ...]
-  has_state: bool = True
-
-  @property
-  def end_addr(self) -> int:
-    return self.start_addr + self.msg_count - 1
-
-
-RADAR_210_21F_DBC_TEMPLATE = """
-BO_ {addr_dec} RADAR_TRACK_{addr_hex}: 32 RADAR
- SG_ CHECKSUM : 0|16@1+ (1,0) [0|65535] "" XXX
- SG_ COUNTER : 16|8@1+ (1,0) [0|255] "" XXX
- SG_ 1_COUNTER_255 : 47|8@0+ (1,0) [0|255] "" XXX
- SG_ 1_STATE_ALT : 51|4@0+ (1,0) [0|15] "" XXX
- SG_ 1_STATE : 55|4@0+ (1,0) [0|15] "" XXX
- SG_ 1_NEW_SIGNAL_3 : 63|8@0- (1,0) [0|255] "" XXX
- SG_ 1_LONG_DIST : 64|12@1+ (0.05,0) [0|4095] "" XXX
- SG_ 1_LAT_DIST : 76|12@1- (0.05,0) [0|4095] "" XXX
- SG_ 1_REL_SPEED : 88|14@1- (0.01,0) [0|16383] "" XXX
- SG_ 1_NEW_SIGNAL_1 : 102|2@1+ (1,0) [0|3] "" XXX
- SG_ 1_LAT_ACCEL : 104|13@1- (1,0) [0|8191] "" XXX
- SG_ 1_REL_ACCEL : 118|10@1- (1,0) [0|1023] "" XXX
- SG_ 2_COUNTER_255 : 175|8@0+ (1,0) [0|255] "" XXX
- SG_ 2_STATE_ALT : 179|4@0+ (1,0) [0|15] "" XXX
- SG_ 2_STATE : 183|4@0+ (1,0) [0|15] "" XXX
- SG_ 2_NEW_SIGNAL_3 : 191|8@0- (1,0) [0|255] "" XXX
- SG_ 2_LONG_DIST : 192|12@1+ (0.05,0) [0|4095] "" XXX
- SG_ 2_LAT_DIST : 204|12@1- (0.05,0) [0|4095] "" XXX
- SG_ 2_REL_SPEED : 216|14@1- (0.01,0) [0|65535] "" XXX
- SG_ 2_NEW_SIGNAL_1 : 230|2@1+ (1,0) [0|3] "" XXX
- SG_ 2_LAT_ACCEL : 232|13@1- (1,0) [0|8191] "" XXX
- SG_ 2_REL_ACCEL : 246|10@1- (1,0) [0|1023] "" XXX
-"""
-
-RADAR_602_611_DBC_TEMPLATE = """
-BO_ {addr_dec} RADAR_TRACK_{addr_hex}: 8 RADAR
- SG_ 1_DISTANCE : 0|10@1+ (0.25,0) [0|255.75] "" XXX
- SG_ 1_LATERAL : 10|11@1+ (0.03,-30.705) [-30.705|30.705] "" XXX
- SG_ 1_SPEED : 21|10@1+ (0.25,-128) [-128|127.75] "" XXX
- SG_ 2_DISTANCE : 31|10@1+ (0.25,0) [0|255.75] "" XXX
- SG_ 2_LATERAL : 41|11@1+ (0.03,-30.705) [-30.705|30.705] "" XXX
- SG_ 2_SPEED : 52|10@1+ (0.25,-128) [-128|127.75] "" XXX
- SG_ COUNTER : 62|2@1+ (1,0) [0|3] "" XXX
-"""
-
-RADAR_FORMATS = (
-  RadarFormat("RADAR_500_51F", RADAR_500_51F_ADDR, RADAR_500_51F_COUNT, RADAR_500_51F_DBC_TEMPLATE, ("",)),
-  RadarFormat("RADAR_3A5_3C4", RADAR_3A5_3C4_ADDR, RADAR_3A5_3C4_COUNT, RADAR_3A5_3C4_DBC_TEMPLATE, ("",)),
-  RadarFormat("RADAR_210_21F", RADAR_210_21F_ADDR, RADAR_210_21F_COUNT, RADAR_210_21F_DBC_TEMPLATE, ("1_", "2_")),
-  RadarFormat("RADAR_602_611", RADAR_602_611_ADDR, RADAR_602_611_COUNT, RADAR_602_611_DBC_TEMPLATE, ("1_", "2_"), has_state=False),
-)
-
-
-def get_radar_format(address: int) -> RadarFormat | None:
-  for radar_format in RADAR_FORMATS:
-    if radar_format.start_addr <= address <= radar_format.end_addr:
-      return radar_format
-  return None
-
-
-def is_exclusive_full_range_match(radar_format: RadarFormat, seen_addresses: dict[str, set[int]]) -> bool:
-  expected_addresses = set(range(radar_format.start_addr, radar_format.end_addr + 1))
-  if seen_addresses[radar_format.name] != expected_addresses:
-    return False
-
-  for other_format in RADAR_FORMATS:
-    if other_format.name == radar_format.name:
-      continue
-
-    other_expected_addresses = set(range(other_format.start_addr, other_format.end_addr + 1))
-    if seen_addresses[other_format.name] == other_expected_addresses:
-      return False
-
-  return True
-
-
-def get_radar_dbc_path(radar_format: RadarFormat) -> str:
-  dbc_path = os.path.join(tempfile.gettempdir(), f"{radar_format.name.lower()}_radar_ui.dbc")
-  dbc_content = "\n".join(
-    radar_format.dbc_template.format(addr_dec=addr, addr_hex=f"{addr:x}")
-    for addr in range(radar_format.start_addr, radar_format.end_addr + 1)
-  )
-  if not os.path.exists(dbc_path) or open(dbc_path).read() != dbc_content:
-    with open(dbc_path, "w") as f:
-      f.write(dbc_content)
-  return dbc_path
-
-
-def get_radar_can_parser(radar_format: RadarFormat, bus: int) -> CANParser:
-  messages = [(f"RADAR_TRACK_{addr:x}", 50) for addr in range(radar_format.start_addr, radar_format.end_addr + 1)]
-  return CANParser(get_radar_dbc_path(radar_format), messages, bus)
-
-
-def get_track_storage_key(radar_format: RadarFormat, bus: int, addr: int, track_prefix: str) -> tuple[str, int, int]:
-  if radar_format.name in ("RADAR_500_51F", "RADAR_3A5_3C4"):
-    return (radar_format.name, bus, addr)
-
-  track_index = int(track_prefix[0]) - 1
-  return (radar_format.name, bus, addr * 2 + track_index)
 
 
 def draw_radar_points(tracks, lid_overlay):
@@ -280,10 +138,10 @@ def ui_thread(addr):
       'modelV2',
       'liveParameters',
       'roadCameraState',
-      'can',
     ],
     addr=addr,
   )
+  logcan = messaging.sub_sock("can", addr=addr, conflate=False, timeout=100)
 
   img = np.zeros((480, 640, 3), dtype='uint8')
   imgff = None
@@ -292,13 +150,13 @@ def ui_thread(addr):
   can_range_msg_count = 0
   active_radar_format_name = None
   active_radar_format_miss_count = 0
-  radar_format_total_counts = {radar_format.name: 0 for radar_format in RADAR_FORMATS}
-  radar_format_seen_addresses = {radar_format.name: set() for radar_format in RADAR_FORMATS}
+  radar_format_total_counts = {radar_spec.name: 0 for radar_spec in RADAR_SPECS}
+  radar_format_seen_addresses = build_seen_address_map()
   radar_track_ids: dict[tuple[str, int, int], int] = {}
   next_radar_track_id = 0
   radar_tracks: dict[tuple[str, int, int], RadarTrackPoint] = {}
   radar_track_last_seen: dict[tuple[str, int, int], int] = {}
-  radar_parsers: dict[str, dict[int, CANParser]] = {}
+  radar_parsers: dict[str, dict[int, object]] = {}
 
   lid_overlay_blank = get_blank_lid_overlay(UP)
 
@@ -418,26 +276,31 @@ def ui_thread(addr):
       rpyCalib = np.asarray(sm['liveCalibration'].rpyCalib)
       calibration = Calibration(num_px, rpyCalib, intrinsic_matrix, calib_scale)
 
-    if sm.updated['can']:
-      can_strings = [(sm.logMonoTime['can'], [(msg.address, msg.dat, msg.src) for msg in sm['can']])]
-      detected_format_counts = {radar_format.name: 0 for radar_format in RADAR_FORMATS}
+    can_packets = messaging.drain_sock(logcan)
+    if can_packets:
+      can_strings = [
+        (can_packet.logMonoTime, [(msg.address, msg.dat, msg.src) for msg in can_packet.can])
+        for can_packet in can_packets
+      ]
+      detected_format_counts = {radar_spec.name: 0 for radar_spec in RADAR_SPECS}
 
-      for msg in sm['can']:
-        radar_format = get_radar_format(msg.address)
-        if radar_format is not None:
-          can_range_msg_count += 1
-          detected_format_counts[radar_format.name] += 1
-          radar_format_total_counts[radar_format.name] += 1
-          radar_format_seen_addresses[radar_format.name].add(msg.address)
-          if radar_format.name not in radar_parsers:
-            radar_parsers[radar_format.name] = {}
-          if msg.src not in radar_parsers[radar_format.name]:
-            radar_parsers[radar_format.name][msg.src] = get_radar_can_parser(radar_format, msg.src)
+      for can_packet in can_packets:
+        for msg in can_packet.can:
+          radar_spec = get_radar_spec(msg.address)
+          if radar_spec is not None:
+            can_range_msg_count += 1
+            detected_format_counts[radar_spec.name] += 1
+            radar_format_total_counts[radar_spec.name] += 1
+            radar_format_seen_addresses[radar_spec.name].add(msg.address)
+            if radar_spec.name not in radar_parsers:
+              radar_parsers[radar_spec.name] = {}
+            if msg.src not in radar_parsers[radar_spec.name]:
+              radar_parsers[radar_spec.name][msg.src] = get_radar_can_parser(radar_spec, msg.src)
 
       matching_formats = [
-        radar_format.name
-        for radar_format in RADAR_FORMATS
-        if is_exclusive_full_range_match(radar_format, radar_format_seen_addresses)
+        radar_spec.name
+        for radar_spec in RADAR_SPECS
+        if is_exclusive_full_range_match(radar_spec, radar_format_seen_addresses)
       ]
       if len(matching_formats) == 1:
         if active_radar_format_name == matching_formats[0]:
@@ -456,13 +319,13 @@ def ui_thread(addr):
           active_radar_format_name = None
           active_radar_format_miss_count = 0
 
-      active_radar_format = next((fmt for fmt in RADAR_FORMATS if fmt.name == active_radar_format_name), None)
-      if active_radar_format is not None:
-        for bus, parser in radar_parsers.get(active_radar_format.name, {}).items():
+      active_radar_spec = next((spec for spec in RADAR_SPECS if spec.name == active_radar_format_name), None)
+      if active_radar_spec is not None:
+        for bus, parser in radar_parsers.get(active_radar_spec.name, {}).items():
           updated_addrs = parser.update(can_strings)
           relevant_updated_addrs = {
             track_addr for track_addr in updated_addrs
-            if active_radar_format.start_addr <= track_addr <= active_radar_format.end_addr
+            if active_radar_spec.start_addr <= track_addr <= active_radar_spec.end_addr
           }
           if not relevant_updated_addrs:
             continue
@@ -470,54 +333,13 @@ def ui_thread(addr):
           for track_addr in relevant_updated_addrs:
             msg_name = f"RADAR_TRACK_{track_addr:x}"
             track_msg = parser.vl[msg_name]
-            for track_prefix in active_radar_format.track_prefixes:
-              track_key = get_track_storage_key(active_radar_format, bus, track_addr, track_prefix)
-              if active_radar_format.name == "RADAR_602_611":
-                ts_nanos = parser.ts_nanos[msg_name][f"{track_prefix}DISTANCE"]
-              elif active_radar_format.name == "RADAR_210_21F":
-                ts_nanos = parser.ts_nanos[msg_name][f"{track_prefix}LONG_DIST"]
-              else:
-                ts_nanos = parser.ts_nanos[msg_name]["LONG_DIST"]
+            for track_prefix in active_radar_spec.track_prefixes:
+              track_key = get_track_storage_key(active_radar_spec, bus, track_addr, track_prefix)
+              ts_nanos = get_track_ts_nanos(parser, msg_name, active_radar_spec, track_prefix)
               if ts_nanos == 0:
                 continue
 
-              if active_radar_format.name == "RADAR_602_611":
-                d_rel = track_msg[f"{track_prefix}DISTANCE"]
-                # if d_rel == 255.75:
-                #   radar_tracks.pop(track_key, None)
-                #   radar_track_last_seen.pop(track_key, None)
-                #   continue
-                y_rel = track_msg[f"{track_prefix}LATERAL"]
-                v_rel = track_msg[f"{track_prefix}SPEED"]
-                a_rel = float("nan")
-              elif active_radar_format.name == "RADAR_210_21F":
-                # if track_msg[f"{track_prefix}STATE"] not in (3, 4):
-                #   radar_tracks.pop(track_key, None)
-                #   radar_track_last_seen.pop(track_key, None)
-                #   continue
-                d_rel = track_msg[f"{track_prefix}LONG_DIST"]
-                y_rel = track_msg[f"{track_prefix}LAT_DIST"]
-                v_rel = track_msg[f"{track_prefix}REL_SPEED"]
-                a_rel = float("nan")
-              elif active_radar_format.name == "RADAR_500_51F":
-                # if track_msg["STATE"] not in (3, 4):
-                #   radar_tracks.pop(track_key, None)
-                #   radar_track_last_seen.pop(track_key, None)
-                #   continue
-                azimuth = math.radians(track_msg["AZIMUTH"])
-                d_rel = math.cos(azimuth) * track_msg["LONG_DIST"]
-                y_rel = 0.5 * -math.sin(azimuth) * track_msg["LONG_DIST"]
-                v_rel = track_msg["REL_SPEED"]
-                a_rel = track_msg["REL_ACCEL"]
-              else:
-                # if track_msg["STATE"] not in (3, 4):
-                #   radar_tracks.pop(track_key, None)
-                #   radar_track_last_seen.pop(track_key, None)
-                #   continue
-                d_rel = track_msg["LONG_DIST"]
-                y_rel = track_msg["LAT_DIST"]
-                v_rel = track_msg["REL_SPEED"]
-                a_rel = track_msg["REL_ACCEL"]
+              d_rel, y_rel, v_rel, a_rel = decode_radar_track(active_radar_spec, track_msg, track_prefix)
 
               if track_key not in radar_track_ids:
                 radar_track_ids[track_key] = next_radar_track_id

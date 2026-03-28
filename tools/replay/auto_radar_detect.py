@@ -7,12 +7,17 @@ import subprocess
 import sys
 import time
 from collections import Counter, defaultdict
-from dataclasses import dataclass
 
 import cereal.messaging as messaging
 from msgq.ipc_pyx import IpcError
 from opendbc.car.tests.routes import CarTestRoute, routes
 from openpilot.tools.replay.custom_routes import CUSTOM_ROUTES
+from openpilot.tools.replay.radar_helpers import (
+  RADAR_SPECS,
+  build_seen_address_map,
+  get_radar_spec,
+  is_exclusive_full_range_match,
+)
 
 
 REPLAY_PATH = os.path.join(os.path.dirname(__file__), "replay")
@@ -33,28 +38,6 @@ ANSI_YELLOW = "\033[33m"
 ANSI_BLUE = "\033[34m"
 ANSI_MAGENTA = "\033[35m"
 ANSI_CYAN = "\033[36m"
-
-
-@dataclass(frozen=True)
-class RadarFamily:
-  name: str
-  start_addr: int
-  msg_count: int
-
-  @property
-  def end_addr(self) -> int:
-    return self.start_addr + self.msg_count - 1
-
-  def contains(self, address: int) -> bool:
-    return self.start_addr <= address <= self.end_addr
-
-
-RADAR_FAMILIES = (
-  RadarFamily("RADAR_500_51F", 0x500, 32),
-  RadarFamily("RADAR_210_21F", 0x210, 16),
-  RadarFamily("RADAR_3A5_3C4", 0x3A5, 32),
-  RadarFamily("RADAR_602_611", 0x602, 16),
-)
 
 RADAR_FAMILY_COLORS = {
   "RADAR_500_51F": ANSI_CYAN,
@@ -201,22 +184,6 @@ def wait_for_can_socket(prefix: str, timeout: float) -> messaging.SubSocket:
       time.sleep(0.1)
 
 
-def is_exclusive_full_range_match(family: RadarFamily, seen_addresses: dict[str, set[int]]) -> bool:
-  expected_addresses = set(range(family.start_addr, family.end_addr + 1))
-  if seen_addresses[family.name] != expected_addresses:
-    return False
-
-  for other_family in RADAR_FAMILIES:
-    if other_family.name == family.name:
-      continue
-
-    other_expected_addresses = set(range(other_family.start_addr, other_family.end_addr + 1))
-    if seen_addresses[other_family.name] == other_expected_addresses:
-      return False
-
-  return True
-
-
 def detect_radar_family(route: CarTestRoute, route_idx: int, args: argparse.Namespace) -> dict:
   prefix = f"{args.prefix}-{os.getpid()}-{route_idx}"
   os.environ["OPENPILOT_PREFIX"] = prefix
@@ -225,7 +192,7 @@ def detect_radar_family(route: CarTestRoute, route_idx: int, args: argparse.Name
   logcan = wait_for_can_socket(prefix, min(args.timeout, SOCKET_WAIT_TIMEOUT_SECONDS))
   counts = Counter()
   buses = defaultdict(set)
-  seen_addresses = {family.name: set() for family in RADAR_FAMILIES}
+  seen_addresses = build_seen_address_map()
   started = time.monotonic()
   detected = None
 
@@ -239,14 +206,13 @@ def detect_radar_family(route: CarTestRoute, route_idx: int, args: argparse.Name
       msgs = messaging.drain_sock(logcan, wait_for_one=True)
       for msg in msgs:
         for can_msg in msg.can:
-          for family in RADAR_FAMILIES:
-            if family.contains(can_msg.address):
-              counts[family.name] += 1
-              buses[family.name].add(can_msg.src)
-              seen_addresses[family.name].add(can_msg.address)
-              if counts[family.name] >= args.min_hits and is_exclusive_full_range_match(family, seen_addresses):
-                detected = family.name
-                break
+          radar_spec = get_radar_spec(can_msg.address)
+          if radar_spec is not None:
+            counts[radar_spec.name] += 1
+            buses[radar_spec.name].add(can_msg.src)
+            seen_addresses[radar_spec.name].add(can_msg.address)
+            if counts[radar_spec.name] >= args.min_hits and is_exclusive_full_range_match(radar_spec, seen_addresses):
+              detected = radar_spec.name
           if detected is not None:
             break
         if detected is not None:
