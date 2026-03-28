@@ -2,12 +2,15 @@
 import argparse
 import os
 import sys
+import tempfile
+from dataclasses import dataclass
 
 import cv2
 import numpy as np
 import pyray as rl
 
 import cereal.messaging as messaging
+from opendbc.can.parser import CANParser
 from openpilot.common.basedir import BASEDIR
 from openpilot.common.transformations.camera import DEVICE_CAMERAS
 from openpilot.tools.replay.lib.ui_helpers import (
@@ -18,15 +21,174 @@ from openpilot.tools.replay.lib.ui_helpers import (
   Calibration,
   get_blank_lid_overlay,
   init_plots,
-  maybe_update_radar_points,
   plot_lead,
   plot_model,
+  to_topdown_pt,
 )
+from openpilot.selfdrive.controls.radard import RADAR_TO_CAMERA
 from msgq.visionipc import VisionIpcClient, VisionStreamType
 
 os.environ['BASEDIR'] = BASEDIR
 
 ANGLE_SCALE = 5.0
+MRREVO14F_RADAR_ADDR = 0x602
+MRREVO14F_RADAR_COUNT = 16
+MRR30_RADAR_ADDR = 0x210
+MRR30_RADAR_COUNT = 16
+MRR35_RADAR_ADDR = 0x3A5
+MRR35_RADAR_COUNT = 32
+MRR35_TRACK_LEN = 24
+MRR35_TRACK_TIMEOUT_FRAMES = 10
+RADAR_TRACK_RADIUS = 4
+CAMERA_RADAR_Y_OFFSET = 25
+MRR35_RADAR_DBC_TEMPLATE = """
+BO_ {addr_dec} RADAR_TRACK_{addr_hex}: 24 RADAR
+ SG_ CHECKSUM : 0|16@1+ (1,0) [0|65535] "" XXX
+ SG_ COUNTER : 16|8@1+ (1,0) [0|255] "" XXX
+ SG_ NEW_SIGNAL_1 : 25|2@0+ (1,0) [0|3] "" XXX
+ SG_ NEW_SIGNAL_3 : 28|2@0+ (1,0) [0|3] "" XXX
+ SG_ COUNTER_3 : 31|2@0+ (1,0) [0|3] "" XXX
+ SG_ NEW_SIGNAL_2 : 38|7@0- (1,0) [0|127] "" XXX
+ SG_ COUNTER_256 : 47|8@0+ (1,0) [0|255] "" XXX
+ SG_ NEW_SIGNAL_6 : 51|4@0+ (1,0) [0|15] "" XXX
+ SG_ STATE : 54|3@0+ (1,0) [0|7] "" XXX
+ SG_ NEW_SIGNAL_8 : 62|7@0- (1,0) [0|127] "" XXX
+ SG_ LONG_DIST : 63|12@1+ (0.05,0) [0|8191] "m" XXX
+ SG_ LAT_DIST : 76|12@1- (0.05,0) [0|127] "" XXX
+ SG_ REL_SPEED : 88|14@1- (0.01,0) [0|16383] "" XXX
+ SG_ NEW_SIGNAL_4 : 103|2@0+ (1,0) [0|3] "" XXX
+ SG_ LAT_DIST_ACCEL : 104|13@1- (1,0) [0|8191] "" XXX
+ SG_ REL_ACCEL : 118|10@1- (0.02,0) [0|1023] "" XXX
+ SG_ NEW_SIGNAL_5 : 133|4@0+ (1,0) [0|15] "" XXX
+"""
+
+
+@dataclass
+class RadarTrackPoint:
+  trackId: int
+  measured: bool = True
+  dRel: float = 0.0
+  yRel: float = 0.0
+  vRel: float = 0.0
+  aRel: float = 0.0
+  yvRel: float = float("nan")
+
+
+@dataclass(frozen=True)
+class RadarFormat:
+  name: str
+  start_addr: int
+  msg_count: int
+  dbc_template: str
+  track_prefixes: tuple[str, ...]
+  has_state: bool = True
+
+  @property
+  def end_addr(self) -> int:
+    return self.start_addr + self.msg_count - 1
+
+
+MRR30_RADAR_DBC_TEMPLATE = """
+BO_ {addr_dec} RADAR_TRACK_{addr_hex}: 32 RADAR
+ SG_ CHECKSUM : 0|16@1+ (1,0) [0|65535] "" XXX
+ SG_ COUNTER : 16|8@1+ (1,0) [0|255] "" XXX
+ SG_ 1_COUNTER_255 : 47|8@0+ (1,0) [0|255] "" XXX
+ SG_ 1_STATE_ALT : 51|4@0+ (1,0) [0|15] "" XXX
+ SG_ 1_STATE : 55|4@0+ (1,0) [0|15] "" XXX
+ SG_ 1_NEW_SIGNAL_3 : 63|8@0- (1,0) [0|255] "" XXX
+ SG_ 1_LONG_DIST : 64|12@1+ (0.05,0) [0|4095] "" XXX
+ SG_ 1_LAT_DIST : 76|12@1- (0.05,0) [0|4095] "" XXX
+ SG_ 1_REL_SPEED : 88|14@1- (0.01,0) [0|16383] "" XXX
+ SG_ 1_NEW_SIGNAL_1 : 102|2@1+ (1,0) [0|3] "" XXX
+ SG_ 1_LAT_ACCEL : 104|13@1- (1,0) [0|8191] "" XXX
+ SG_ 1_REL_ACCEL : 118|10@1- (1,0) [0|1023] "" XXX
+ SG_ 2_COUNTER_255 : 175|8@0+ (1,0) [0|255] "" XXX
+ SG_ 2_STATE_ALT : 179|4@0+ (1,0) [0|15] "" XXX
+ SG_ 2_STATE : 183|4@0+ (1,0) [0|15] "" XXX
+ SG_ 2_NEW_SIGNAL_3 : 191|8@0- (1,0) [0|255] "" XXX
+ SG_ 2_LONG_DIST : 192|12@1+ (0.05,0) [0|4095] "" XXX
+ SG_ 2_LAT_DIST : 204|12@1- (0.05,0) [0|4095] "" XXX
+ SG_ 2_REL_SPEED : 216|14@1- (0.01,0) [0|65535] "" XXX
+ SG_ 2_NEW_SIGNAL_1 : 230|2@1+ (1,0) [0|3] "" XXX
+ SG_ 2_LAT_ACCEL : 232|13@1- (1,0) [0|8191] "" XXX
+ SG_ 2_REL_ACCEL : 246|10@1- (1,0) [0|1023] "" XXX
+"""
+
+MRREVO14F_RADAR_DBC_TEMPLATE = """
+BO_ {addr_dec} RADAR_TRACK_{addr_hex}: 8 RADAR
+ SG_ 1_DISTANCE : 0|10@1+ (0.25,0) [0|255.75] "" XXX
+ SG_ 1_LATERAL : 10|11@1+ (0.03,-30.705) [-30.705|30.705] "" XXX
+ SG_ 1_SPEED : 21|10@1+ (0.25,-128) [-128|127.75] "" XXX
+ SG_ 2_DISTANCE : 31|10@1+ (0.25,0) [0|255.75] "" XXX
+ SG_ 2_LATERAL : 41|11@1+ (0.03,-30.705) [-30.705|30.705] "" XXX
+ SG_ 2_SPEED : 52|10@1+ (0.25,-128) [-128|127.75] "" XXX
+ SG_ COUNTER : 62|2@1+ (1,0) [0|3] "" XXX
+"""
+
+RADAR_FORMATS = (
+  RadarFormat("MRR35", MRR35_RADAR_ADDR, MRR35_RADAR_COUNT, MRR35_RADAR_DBC_TEMPLATE, ("",)),
+  RadarFormat("MRR30", MRR30_RADAR_ADDR, MRR30_RADAR_COUNT, MRR30_RADAR_DBC_TEMPLATE, ("1_", "2_")),
+  RadarFormat("MRREVO14F", MRREVO14F_RADAR_ADDR, MRREVO14F_RADAR_COUNT, MRREVO14F_RADAR_DBC_TEMPLATE, ("1_", "2_"), has_state=False),
+)
+
+
+def get_radar_format(address: int) -> RadarFormat | None:
+  for radar_format in RADAR_FORMATS:
+    if radar_format.start_addr <= address <= radar_format.end_addr:
+      return radar_format
+  return None
+
+
+def get_radar_dbc_path(radar_format: RadarFormat) -> str:
+  dbc_path = os.path.join(tempfile.gettempdir(), f"{radar_format.name.lower()}_radar_ui.dbc")
+  dbc_content = "\n".join(
+    radar_format.dbc_template.format(addr_dec=addr, addr_hex=f"{addr:x}")
+    for addr in range(radar_format.start_addr, radar_format.end_addr + 1)
+  )
+  if not os.path.exists(dbc_path) or open(dbc_path).read() != dbc_content:
+    with open(dbc_path, "w") as f:
+      f.write(dbc_content)
+  return dbc_path
+
+
+def get_radar_can_parser(radar_format: RadarFormat, bus: int) -> CANParser:
+  messages = [(f"RADAR_TRACK_{addr:x}", 50) for addr in range(radar_format.start_addr, radar_format.end_addr + 1)]
+  return CANParser(get_radar_dbc_path(radar_format), messages, bus)
+
+
+def get_track_storage_key(radar_format: RadarFormat, bus: int, addr: int, track_prefix: str) -> tuple[str, int, int]:
+  if radar_format.name == "MRR35":
+    return (radar_format.name, bus, addr)
+
+  track_index = int(track_prefix[0]) - 1
+  return (radar_format.name, bus, addr * 2 + track_index)
+
+
+def draw_radar_points(tracks, lid_overlay):
+  for track in tracks:
+    px, py = to_topdown_pt(track.dRel, -track.yRel)
+    if px != -1:
+      cv2.circle(lid_overlay, (py, px), RADAR_TRACK_RADIUS, 255, thickness=-1, lineType=cv2.LINE_AA)
+
+
+def draw_radar_points_camera(tracks, img, calibration):
+  if calibration is None:
+    return
+
+  for track in tracks:
+    if track.dRel <= 0.0:
+      continue
+
+    # Match the road-space projection convention used by other UI overlays.
+    pt = calibration.car_space_to_bb(
+      np.asarray([track.dRel - RADAR_TO_CAMERA]),
+      np.asarray([-track.yRel]),
+      np.asarray([1.0]),
+    )
+    x, y = np.round(pt[0]).astype(int)
+    y += CAMERA_RADAR_Y_OFFSET
+    if 0 <= x < img.shape[1] and 0 <= y < img.shape[0]:
+      cv2.circle(img, (x, y), RADAR_TRACK_RADIUS, (255, 255, 255), thickness=-1, lineType=cv2.LINE_AA)
 
 
 def ui_thread(addr):
@@ -84,6 +246,7 @@ def ui_thread(addr):
       'modelV2',
       'liveParameters',
       'roadCameraState',
+      'can',
     ],
     addr=addr,
   )
@@ -92,6 +255,13 @@ def ui_thread(addr):
   imgff = None
   num_px = 0
   calibration = None
+  can_range_msg_count = 0
+  active_radar_format_name = None
+  radar_track_ids: dict[tuple[str, int, int], int] = {}
+  next_radar_track_id = 0
+  radar_tracks: dict[tuple[str, int, int], RadarTrackPoint] = {}
+  radar_track_last_seen: dict[tuple[str, int, int], int] = {}
+  radar_parsers: dict[str, dict[int, CANParser]] = {}
 
   lid_overlay_blank = get_blank_lid_overlay(UP)
 
@@ -168,7 +338,7 @@ def ui_thread(addr):
     rgb = cv2.cvtColor(imgff[: h * 3 // 2, : w], cv2.COLOR_YUV2RGB_NV12)
 
     qcam = "QCAM" in os.environ
-    bb_scale = (528 if qcam else camera.fcam.width) / 640.0
+    bb_scale = 0.8
     calib_scale = camera.fcam.width / 640.0
     zoom_matrix = np.asarray([[bb_scale, 0.0, 0.0], [0.0, bb_scale, 0.0], [0.0, 0.0, 1.0]])
     cv2.warpAffine(rgb, zoom_matrix[:2], (img.shape[1], img.shape[0]), dst=img, flags=cv2.WARP_INVERSE_MAP)
@@ -207,12 +377,112 @@ def ui_thread(addr):
     if sm.recv_frame['radarState']:
       plot_lead(sm['radarState'], top_down)
 
-    # draw all radar points
-    maybe_update_radar_points(sm['liveTracks'].points, top_down[1])
-
     if sm.updated['liveCalibration'] and num_px:
       rpyCalib = np.asarray(sm['liveCalibration'].rpyCalib)
       calibration = Calibration(num_px, rpyCalib, intrinsic_matrix, calib_scale)
+
+    if sm.updated['can']:
+      can_strings = [(sm.logMonoTime['can'], [(msg.address, msg.dat, msg.src) for msg in sm['can']])]
+      detected_format_counts = {radar_format.name: 0 for radar_format in RADAR_FORMATS}
+
+      for msg in sm['can']:
+        radar_format = get_radar_format(msg.address)
+        if radar_format is not None:
+          can_range_msg_count += 1
+          detected_format_counts[radar_format.name] += 1
+          if radar_format.name not in radar_parsers:
+            radar_parsers[radar_format.name] = {}
+          if msg.src not in radar_parsers[radar_format.name]:
+            radar_parsers[radar_format.name][msg.src] = get_radar_can_parser(radar_format, msg.src)
+
+      best_format_name = max(detected_format_counts, key=detected_format_counts.get)
+      if detected_format_counts[best_format_name] > 0:
+        active_radar_format_name = best_format_name
+
+      active_radar_format = next((fmt for fmt in RADAR_FORMATS if fmt.name == active_radar_format_name), None)
+      if active_radar_format is not None:
+        for bus, parser in radar_parsers.get(active_radar_format.name, {}).items():
+          updated_addrs = parser.update(can_strings)
+          relevant_updated_addrs = {
+            track_addr for track_addr in updated_addrs
+            if active_radar_format.start_addr <= track_addr <= active_radar_format.end_addr
+          }
+          if not relevant_updated_addrs:
+            continue
+
+          for track_addr in relevant_updated_addrs:
+            msg_name = f"RADAR_TRACK_{track_addr:x}"
+            track_msg = parser.vl[msg_name]
+            for track_prefix in active_radar_format.track_prefixes:
+              track_key = get_track_storage_key(active_radar_format, bus, track_addr, track_prefix)
+              if active_radar_format.name == "MRREVO14F":
+                ts_nanos = parser.ts_nanos[msg_name][f"{track_prefix}DISTANCE"]
+              elif active_radar_format.name == "MRR30":
+                ts_nanos = parser.ts_nanos[msg_name][f"{track_prefix}LONG_DIST"]
+              else:
+                ts_nanos = parser.ts_nanos[msg_name]["LONG_DIST"]
+              if ts_nanos == 0:
+                continue
+
+              if active_radar_format.name == "MRREVO14F":
+                d_rel = track_msg[f"{track_prefix}DISTANCE"]
+                # if d_rel == 255.75:
+                #   radar_tracks.pop(track_key, None)
+                #   radar_track_last_seen.pop(track_key, None)
+                #   continue
+                y_rel = track_msg[f"{track_prefix}LATERAL"]
+                v_rel = track_msg[f"{track_prefix}SPEED"]
+                a_rel = float("nan")
+              elif active_radar_format.name == "MRR30":
+                # if track_msg[f"{track_prefix}STATE"] not in (3, 4):
+                #   radar_tracks.pop(track_key, None)
+                #   radar_track_last_seen.pop(track_key, None)
+                #   continue
+                d_rel = track_msg[f"{track_prefix}LONG_DIST"]
+                y_rel = track_msg[f"{track_prefix}LAT_DIST"]
+                v_rel = track_msg[f"{track_prefix}REL_SPEED"]
+                a_rel = float("nan")
+              else:
+                # if track_msg["STATE"] not in (3, 4):
+                #   radar_tracks.pop(track_key, None)
+                #   radar_track_last_seen.pop(track_key, None)
+                #   continue
+                d_rel = track_msg["LONG_DIST"]
+                y_rel = track_msg["LAT_DIST"]
+                v_rel = track_msg["REL_SPEED"]
+                a_rel = track_msg["REL_ACCEL"]
+
+              if track_key not in radar_track_ids:
+                radar_track_ids[track_key] = next_radar_track_id
+                next_radar_track_id += 1
+
+              radar_tracks[track_key] = RadarTrackPoint(
+                trackId=radar_track_ids[track_key],
+                dRel=d_rel,
+                yRel=y_rel,
+                vRel=v_rel,
+                aRel=a_rel,
+              )
+              radar_track_last_seen[track_key] = sm.frame
+
+      stale_tracks = [
+        track_key for track_key, last_seen in radar_track_last_seen.items()
+        if (sm.frame - last_seen) > MRR35_TRACK_TIMEOUT_FRAMES
+      ]
+      for track_key in stale_tracks:
+        radar_track_last_seen.pop(track_key, None)
+        radar_tracks.pop(track_key, None)
+
+    active_radar_tracks = [
+      track for track_key, track in radar_tracks.items()
+      if active_radar_format_name is not None and track_key[0] == active_radar_format_name
+    ]
+    if len(active_radar_tracks) == 0:
+      active_radar_tracks = sm['liveTracks'].points
+
+    # draw decoded radar tracks when present, otherwise fall back to liveTracks
+    draw_radar_points(active_radar_tracks, top_down[1])
+    draw_radar_points_camera(active_radar_tracks, img, calibration)
 
     # *** blits ***
     # Update camera texture from numpy array
@@ -244,6 +514,9 @@ def ui_thread(addr):
       ("LONG CONTROL STATE: " + str(sm['controlsState'].longControlState), YELLOW),
       ("LONG MPC SOURCE: " + str(sm['longitudinalPlan'].longitudinalPlanSource), YELLOW),
       None,
+      (f"RADAR FORMAT: {active_radar_format_name or 'NONE'}", YELLOW),
+      (f"RADAR CAN MSGS: {can_range_msg_count}", YELLOW),
+      (f"RADAR TRACKS: {len(active_radar_tracks)}", YELLOW),
       ("ANGLE OFFSET (AVG): " + str(round(sm['liveParameters'].angleOffsetAverageDeg, 2)) + " deg", YELLOW),
       ("ANGLE OFFSET (INSTANT): " + str(round(sm['liveParameters'].angleOffsetDeg, 2)) + " deg", YELLOW),
       ("STIFFNESS: " + str(round(sm['liveParameters'].stiffnessFactor * 100.0, 2)) + " %", YELLOW),
