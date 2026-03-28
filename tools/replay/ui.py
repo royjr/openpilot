@@ -51,6 +51,7 @@ RADAR_TRACK_RADIUS = 4
 CAMERA_RADAR_Y_OFFSET = 25
 REPLAY_PATH = os.path.join(os.path.dirname(__file__), "replay")
 REPLAY_SOCKET_WAIT_TIMEOUT_SECONDS = 10.0
+REPLAY_SPEEDS = (0.2, 0.5, 1.0, 2.0, 4.0, 8.0)
 
 
 @dataclass
@@ -264,24 +265,25 @@ def ui_thread(addr, route_entries=None, playback="1.0", data_dir=None, prefix="u
   current_start_seconds = 0
   paused = False
   state_checks_enabled = False
+  current_playback = min(REPLAY_SPEEDS, key=lambda speed: abs(speed - float(playback)))
   last_replay_started_at = time.monotonic()
   loading_status = "Initializing UI"
 
   def current_offset_seconds() -> int:
     if paused or replay_proc is None or replay_proc.poll() is not None:
       return current_start_seconds
-    return max(0, int(current_start_seconds + (time.monotonic() - last_replay_started_at) * float(playback)))
+    return max(0, int(current_start_seconds + (time.monotonic() - last_replay_started_at) * current_playback))
 
   def connect_streams():
-    nonlocal replay_proc, current_route_name, current_route_model, current_route_idx, current_start_seconds, loading_status, paused, last_replay_started_at
+    nonlocal replay_proc, current_route_name, current_route_model, current_route_idx, current_start_seconds, loading_status, paused, last_replay_started_at, current_playback
 
     if route_entries:
       current_route_name, current_route_model = route_entries[current_route_idx]
-      loading_status = f"Starting replay for route {current_route_idx + 1}/{len(route_entries)} at {current_start_seconds}s"
+      loading_status = f"Starting replay for route {current_route_idx + 1}/{len(route_entries)} at {current_start_seconds}s ({current_playback:.1f}x)"
       stop_replay(replay_proc)
       os.environ["OPENPILOT_PREFIX"] = prefix
       messaging.reset_context()
-      replay_proc = start_replay(current_route_name, prefix, playback, data_dir, current_start_seconds)
+      replay_proc = start_replay(current_route_name, prefix, f"{current_playback:.1f}", data_dir, current_start_seconds)
       paused = False
       last_replay_started_at = time.monotonic()
       loading_status = "Waiting for CAN socket"
@@ -443,6 +445,46 @@ def ui_thread(addr, route_entries=None, playback="1.0", data_dir=None, prefix="u
       sm, logcan = connect_streams()
       vipc_client = VisionIpcClient("camerad", VisionStreamType.VISION_STREAM_ROAD, True)
 
+    if route_entries and (rl.is_key_released(rl.KeyboardKey.KEY_EQUAL) or rl.is_key_released(rl.KeyboardKey.KEY_KP_ADD)):
+      for speed in REPLAY_SPEEDS:
+        if speed > current_playback:
+          current_playback = speed
+          break
+      if not paused:
+        current_start_seconds = current_offset_seconds()
+        (can_range_msg_count,
+         active_radar_format_name,
+         active_radar_format_miss_count,
+         radar_format_total_counts,
+         radar_format_seen_addresses,
+         radar_track_ids,
+         next_radar_track_id,
+         radar_tracks,
+         radar_track_last_seen,
+         radar_parsers) = reset_radar_state()
+        sm, logcan = connect_streams()
+        vipc_client = VisionIpcClient("camerad", VisionStreamType.VISION_STREAM_ROAD, True)
+
+    if route_entries and (rl.is_key_released(rl.KeyboardKey.KEY_MINUS) or rl.is_key_released(rl.KeyboardKey.KEY_KP_SUBTRACT)):
+      for speed in reversed(REPLAY_SPEEDS):
+        if speed < current_playback:
+          current_playback = speed
+          break
+      if not paused:
+        current_start_seconds = current_offset_seconds()
+        (can_range_msg_count,
+         active_radar_format_name,
+         active_radar_format_miss_count,
+         radar_format_total_counts,
+         radar_format_seen_addresses,
+         radar_track_ids,
+         next_radar_track_id,
+         radar_tracks,
+         radar_track_last_seen,
+         radar_parsers) = reset_radar_state()
+        sm, logcan = connect_streams()
+        vipc_client = VisionIpcClient("camerad", VisionStreamType.VISION_STREAM_ROAD, True)
+
     if rl.is_key_released(rl.KeyboardKey.KEY_D):
       state_checks_enabled = not state_checks_enabled
 
@@ -457,8 +499,9 @@ def ui_thread(addr, route_entries=None, playback="1.0", data_dir=None, prefix="u
         f"Platform: {current_route_model}" if current_route_model is not None else "",
         f"Route: {current_route_name}" if current_route_name is not None else "",
         f"Offset: {current_offset_seconds()}s" if route_entries else "",
+        f"Playback: {current_playback:.1f}x" if route_entries else "",
         f"Radar state checks: {'ON' if state_checks_enabled else 'OFF'}",
-        "Keys: SPACE play/pause, RIGHT next, LEFT prev, M +/-60s, S +/-10s, D state checks" if route_entries else "Key: D state checks",
+        "Keys: SPACE play/pause, RIGHT next, LEFT prev, M +/-60s, S +/-10s, +/- speed, D state checks" if route_entries else "Key: D state checks",
       ]
       draw_loading_overlay(font, loading_lines, camera_texture, top_down_texture, hor_mode, 80, 160)
       rl.end_drawing()
@@ -663,8 +706,9 @@ def ui_thread(addr, route_entries=None, playback="1.0", data_dir=None, prefix="u
       (f"ROUTE: {current_route_name}" if current_route_name is not None else "", YELLOW),
       (f"PLATFORM: {current_route_model}" if current_route_model is not None else "", YELLOW),
       (f"OFFSET: {current_offset_seconds()}s" if route_entries else "", YELLOW),
+      (f"PLAYBACK: {current_playback:.1f}x" if route_entries else "", YELLOW),
       (f"STATUS: {'PAUSED' if paused else 'PLAYING'}" if route_entries else "", YELLOW),
-      ("KEYS: SPACE play/pause, RIGHT next, LEFT prev, M +/-60s, S +/-10s, D state checks" if route_entries else "KEY: D state checks", YELLOW),
+      ("KEYS: SPACE play/pause, RIGHT next, LEFT prev, M +/-60s, S +/-10s, +/- speed, D state checks" if route_entries else "KEY: D state checks", YELLOW),
       ("ANGLE OFFSET (AVG): " + str(round(sm['liveParameters'].angleOffsetAverageDeg, 2)) + " deg", YELLOW),
       ("ANGLE OFFSET (INSTANT): " + str(round(sm['liveParameters'].angleOffsetDeg, 2)) + " deg", YELLOW),
       ("STIFFNESS: " + str(round(sm['liveParameters'].stiffnessFactor * 100.0, 2)) + " %", YELLOW),
