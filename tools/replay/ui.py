@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 import argparse
 import os
+import signal
+import subprocess
 import sys
+import time
 from dataclasses import dataclass
 
 import cv2
@@ -43,6 +46,8 @@ RADAR_TRACK_TIMEOUT_FRAMES = 10
 RADAR_FORMAT_SWITCH_MISS_FRAMES = 30
 RADAR_TRACK_RADIUS = 4
 CAMERA_RADAR_Y_OFFSET = 25
+REPLAY_PATH = os.path.join(os.path.dirname(__file__), "replay")
+REPLAY_SOCKET_WAIT_TIMEOUT_SECONDS = 10.0
 
 
 @dataclass
@@ -81,6 +86,62 @@ def draw_radar_points_camera(tracks, img, calibration):
     y += CAMERA_RADAR_Y_OFFSET
     if 0 <= x < img.shape[1] and 0 <= y < img.shape[0]:
       cv2.circle(img, (x, y), RADAR_TRACK_RADIUS, (255, 255, 255), thickness=-1, lineType=cv2.LINE_AA)
+
+
+def start_replay(route: str, prefix: str, playback: str, data_dir: str | None) -> subprocess.Popen:
+  cmd = [
+    REPLAY_PATH,
+    "--playback", playback,
+    "--prefix", prefix,
+  ]
+  if data_dir:
+    cmd.extend(["--data_dir", data_dir])
+  cmd.append(route)
+
+  env = os.environ.copy()
+  env["OPENPILOT_PREFIX"] = prefix
+  return subprocess.Popen(
+    cmd,
+    cwd=os.path.dirname(REPLAY_PATH),
+    env=env,
+    stdout=subprocess.DEVNULL,
+    stderr=subprocess.DEVNULL,
+    preexec_fn=os.setsid if os.name != "nt" else None,
+  )
+
+
+def stop_replay(proc: subprocess.Popen | None) -> None:
+  if proc is None or proc.poll() is not None:
+    return
+
+  if os.name != "nt":
+    try:
+      os.killpg(proc.pid, signal.SIGTERM)
+    except ProcessLookupError:
+      return
+  else:
+    proc.terminate()
+
+  try:
+    proc.wait(timeout=5)
+  except subprocess.TimeoutExpired:
+    if os.name != "nt":
+      try:
+        os.killpg(proc.pid, signal.SIGKILL)
+      except ProcessLookupError:
+        return
+    else:
+      proc.kill()
+    proc.wait(timeout=5)
+
+
+def wait_for_can_socket(prefix: str, timeout: float) -> None:
+  socket_path = os.path.join("/tmp", f"msgq_{prefix}", "can")
+  started = time.monotonic()
+  while not os.path.exists(socket_path):
+    if time.monotonic() - started > timeout:
+      raise TimeoutError(f"Timed out waiting for CAN socket at {socket_path}")
+    time.sleep(0.1)
 
 
 def ui_thread(addr):
@@ -429,16 +490,28 @@ def get_arg_parser():
   parser = argparse.ArgumentParser(description="Show replay data in a UI.", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
   parser.add_argument("ip_address", nargs="?", default="127.0.0.1", help="The ip address on which to receive zmq messages.")
-
+  parser.add_argument("--route", default=None, help="Route to replay locally before opening the UI.")
+  parser.add_argument("--data-dir", default=None, help="Optional local route data directory to pass to replay.")
+  parser.add_argument("--playback", default="1.0", help="Replay playback speed when using --route.")
+  parser.add_argument("--prefix", default="ui-replay", help="OPENPILOT_PREFIX to use when launching replay from the UI.")
   parser.add_argument("--frame-address", default=None, help="The frame address (fully qualified ZMQ endpoint for frames) on which to receive zmq messages.")
   return parser
 
 
 if __name__ == "__main__":
   args = get_arg_parser().parse_args(sys.argv[1:])
+  replay_proc = None
 
-  if args.ip_address != "127.0.0.1":
+  if args.route is not None:
+    os.environ["OPENPILOT_PREFIX"] = args.prefix
+    messaging.reset_context()
+    replay_proc = start_replay(args.route, args.prefix, args.playback, args.data_dir)
+    wait_for_can_socket(args.prefix, REPLAY_SOCKET_WAIT_TIMEOUT_SECONDS)
+  elif args.ip_address != "127.0.0.1":
     os.environ["ZMQ"] = "1"
     messaging.reset_context()
 
-  ui_thread(args.ip_address)
+  try:
+    ui_thread(args.ip_address)
+  finally:
+    stop_replay(replay_proc)
