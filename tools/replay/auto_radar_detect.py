@@ -345,7 +345,10 @@ def main() -> int:
         print_progress_line(completed, total, route, result['detected'])
         results.append((idx, result))
 
-  results = [result for _, result in sorted(results, key=lambda item: item[0])]
+  results = sorted(
+    (result for _, result in results),
+    key=lambda result: (result["car_model"], result["route"]),
+  )
 
   print()
   print_results(results)
