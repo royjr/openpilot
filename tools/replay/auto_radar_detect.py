@@ -201,6 +201,22 @@ def wait_for_can_socket(prefix: str, timeout: float) -> messaging.SubSocket:
       time.sleep(0.1)
 
 
+def is_exclusive_full_range_match(family: RadarFamily, seen_addresses: dict[str, set[int]]) -> bool:
+  expected_addresses = set(range(family.start_addr, family.end_addr + 1))
+  if seen_addresses[family.name] != expected_addresses:
+    return False
+
+  for other_family in RADAR_FAMILIES:
+    if other_family.name == family.name:
+      continue
+
+    other_expected_addresses = set(range(other_family.start_addr, other_family.end_addr + 1))
+    if seen_addresses[other_family.name] == other_expected_addresses:
+      return False
+
+  return True
+
+
 def detect_radar_family(route: CarTestRoute, route_idx: int, args: argparse.Namespace) -> dict:
   prefix = f"{args.prefix}-{os.getpid()}-{route_idx}"
   os.environ["OPENPILOT_PREFIX"] = prefix
@@ -209,6 +225,7 @@ def detect_radar_family(route: CarTestRoute, route_idx: int, args: argparse.Name
   logcan = wait_for_can_socket(prefix, min(args.timeout, SOCKET_WAIT_TIMEOUT_SECONDS))
   counts = Counter()
   buses = defaultdict(set)
+  seen_addresses = {family.name: set() for family in RADAR_FAMILIES}
   started = time.monotonic()
   detected = None
 
@@ -226,7 +243,8 @@ def detect_radar_family(route: CarTestRoute, route_idx: int, args: argparse.Name
             if family.contains(can_msg.address):
               counts[family.name] += 1
               buses[family.name].add(can_msg.src)
-              if counts[family.name] >= args.min_hits:
+              seen_addresses[family.name].add(can_msg.address)
+              if counts[family.name] >= args.min_hits and is_exclusive_full_range_match(family, seen_addresses):
                 detected = family.name
                 break
           if detected is not None:
@@ -239,8 +257,6 @@ def detect_radar_family(route: CarTestRoute, route_idx: int, args: argparse.Name
     stop_replay(proc)
 
   dominant_family = detected
-  if dominant_family is None and counts:
-    dominant_family = counts.most_common(1)[0][0]
 
   return {
     "route": route.route,
@@ -248,6 +264,7 @@ def detect_radar_family(route: CarTestRoute, route_idx: int, args: argparse.Name
     "detected": dominant_family or "NONE",
     "counts": dict(counts),
     "buses": {name: sorted(bus_set) for name, bus_set in buses.items()},
+    "seen_addresses": {name: sorted(addresses) for name, addresses in seen_addresses.items()},
   }
 
 

@@ -157,6 +157,22 @@ def get_radar_format(address: int) -> RadarFormat | None:
   return None
 
 
+def is_exclusive_full_range_match(radar_format: RadarFormat, seen_addresses: dict[str, set[int]]) -> bool:
+  expected_addresses = set(range(radar_format.start_addr, radar_format.end_addr + 1))
+  if seen_addresses[radar_format.name] != expected_addresses:
+    return False
+
+  for other_format in RADAR_FORMATS:
+    if other_format.name == radar_format.name:
+      continue
+
+    other_expected_addresses = set(range(other_format.start_addr, other_format.end_addr + 1))
+    if seen_addresses[other_format.name] == other_expected_addresses:
+      return False
+
+  return True
+
+
 def get_radar_dbc_path(radar_format: RadarFormat) -> str:
   dbc_path = os.path.join(tempfile.gettempdir(), f"{radar_format.name.lower()}_radar_ui.dbc")
   dbc_content = "\n".join(
@@ -277,6 +293,7 @@ def ui_thread(addr):
   active_radar_format_name = None
   active_radar_format_miss_count = 0
   radar_format_total_counts = {radar_format.name: 0 for radar_format in RADAR_FORMATS}
+  radar_format_seen_addresses = {radar_format.name: set() for radar_format in RADAR_FORMATS}
   radar_track_ids: dict[tuple[str, int, int], int] = {}
   next_radar_track_id = 0
   radar_tracks: dict[tuple[str, int, int], RadarTrackPoint] = {}
@@ -411,29 +428,33 @@ def ui_thread(addr):
           can_range_msg_count += 1
           detected_format_counts[radar_format.name] += 1
           radar_format_total_counts[radar_format.name] += 1
+          radar_format_seen_addresses[radar_format.name].add(msg.address)
           if radar_format.name not in radar_parsers:
             radar_parsers[radar_format.name] = {}
           if msg.src not in radar_parsers[radar_format.name]:
             radar_parsers[radar_format.name][msg.src] = get_radar_can_parser(radar_format, msg.src)
 
-      formats_seen_this_update = [name for name, count in detected_format_counts.items() if count > 0]
-      if active_radar_format_name is None and formats_seen_this_update:
-        active_radar_format_name = max(
-          formats_seen_this_update,
-          key=lambda name: radar_format_total_counts[name],
-        )
-        active_radar_format_miss_count = 0
-      elif active_radar_format_name is not None:
-        if detected_format_counts[active_radar_format_name] > 0:
+      matching_formats = [
+        radar_format.name
+        for radar_format in RADAR_FORMATS
+        if is_exclusive_full_range_match(radar_format, radar_format_seen_addresses)
+      ]
+      if len(matching_formats) == 1:
+        if active_radar_format_name == matching_formats[0]:
+          active_radar_format_miss_count = 0
+        elif active_radar_format_name is None:
+          active_radar_format_name = matching_formats[0]
           active_radar_format_miss_count = 0
         else:
           active_radar_format_miss_count += 1
-          if formats_seen_this_update and active_radar_format_miss_count >= RADAR_FORMAT_SWITCH_MISS_FRAMES:
-            active_radar_format_name = max(
-              formats_seen_this_update,
-              key=lambda name: radar_format_total_counts[name],
-            )
+          if active_radar_format_miss_count >= RADAR_FORMAT_SWITCH_MISS_FRAMES:
+            active_radar_format_name = matching_formats[0]
             active_radar_format_miss_count = 0
+      elif len(matching_formats) == 0 and active_radar_format_name is not None:
+        active_radar_format_miss_count += 1
+        if active_radar_format_miss_count >= RADAR_FORMAT_SWITCH_MISS_FRAMES:
+          active_radar_format_name = None
+          active_radar_format_miss_count = 0
 
       active_radar_format = next((fmt for fmt in RADAR_FORMATS if fmt.name == active_radar_format_name), None)
       if active_radar_format is not None:
