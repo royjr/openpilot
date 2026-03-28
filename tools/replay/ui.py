@@ -12,8 +12,10 @@ import numpy as np
 import pyray as rl
 
 import cereal.messaging as messaging
+from opendbc.car.tests.routes import routes
 from openpilot.common.basedir import BASEDIR
 from openpilot.common.transformations.camera import DEVICE_CAMERAS
+from openpilot.tools.replay.custom_routes import CUSTOM_ROUTES
 from openpilot.tools.replay.lib.ui_helpers import (
   UP,
   BLACK,
@@ -35,6 +37,7 @@ from openpilot.tools.replay.radar_helpers import (
   get_track_storage_key,
   get_track_ts_nanos,
   is_exclusive_full_range_match,
+  is_radar_track_valid,
 )
 from openpilot.selfdrive.controls.radard import RADAR_TO_CAMERA
 from msgq.visionipc import VisionIpcClient, VisionStreamType
@@ -88,12 +91,14 @@ def draw_radar_points_camera(tracks, img, calibration):
       cv2.circle(img, (x, y), RADAR_TRACK_RADIUS, (255, 255, 255), thickness=-1, lineType=cv2.LINE_AA)
 
 
-def start_replay(route: str, prefix: str, playback: str, data_dir: str | None) -> subprocess.Popen:
+def start_replay(route: str, prefix: str, playback: str, data_dir: str | None, start_seconds: int) -> subprocess.Popen:
   cmd = [
     REPLAY_PATH,
     "--playback", playback,
     "--prefix", prefix,
   ]
+  if start_seconds > 0:
+    cmd.extend(["--start", str(start_seconds)])
   if data_dir:
     cmd.extend(["--data_dir", data_dir])
   cmd.append(route)
@@ -144,7 +149,54 @@ def wait_for_can_socket(prefix: str, timeout: float) -> None:
     time.sleep(0.1)
 
 
-def ui_thread(addr):
+def get_hkg_routes() -> list[tuple[str, str]]:
+  hkg_prefixes = ("HYUNDAI_", "KIA_", "GENESIS_")
+  return [
+    (route.route, getattr(route.car_model, "name", str(route.car_model)))
+    for route in routes
+    if route.car_model is not None and getattr(route.car_model, "name", str(route.car_model)).startswith(hkg_prefixes)
+  ]
+
+
+def get_custom_routes() -> list[tuple[str, str]]:
+  return [(route.route, route.car_model) for route in CUSTOM_ROUTES]
+
+
+def make_submaster(addr):
+  return messaging.SubMaster(
+    [
+      'carState',
+      'longitudinalPlan',
+      'carControl',
+      'radarState',
+      'liveCalibration',
+      'controlsState',
+      'selfdriveState',
+      'liveTracks',
+      'modelV2',
+      'liveParameters',
+      'roadCameraState',
+    ],
+    addr=addr,
+  )
+
+
+def reset_radar_state():
+  return (
+    0,
+    None,
+    0,
+    {radar_spec.name: 0 for radar_spec in RADAR_SPECS},
+    build_seen_address_map(),
+    {},
+    0,
+    {},
+    {},
+    {},
+  )
+
+
+def ui_thread(addr, route_entries=None, playback="1.0", data_dir=None, prefix="ui-replay"):
   cv2.setNumThreads(1)
 
   # Get monitor info before creating window
@@ -186,38 +238,58 @@ def ui_thread(addr):
   top_down_texture = rl.load_texture_from_image(top_down_image)
   rl.unload_image(top_down_image)
 
-  sm = messaging.SubMaster(
-    [
-      'carState',
-      'longitudinalPlan',
-      'carControl',
-      'radarState',
-      'liveCalibration',
-      'controlsState',
-      'selfdriveState',
-      'liveTracks',
-      'modelV2',
-      'liveParameters',
-      'roadCameraState',
-    ],
-    addr=addr,
-  )
-  logcan = messaging.sub_sock("can", addr=addr, conflate=False, timeout=100)
+  current_route_idx = 0
+  current_route_name = None
+  current_route_model = None
+  replay_proc = None
+  current_start_seconds = 0
+  paused = False
+  state_checks_enabled = False
+  last_replay_started_at = time.monotonic()
+  loading_status = "Initializing UI"
+
+  def current_offset_seconds() -> int:
+    if paused or replay_proc is None or replay_proc.poll() is not None:
+      return current_start_seconds
+    return max(0, int(current_start_seconds + (time.monotonic() - last_replay_started_at) * float(playback)))
+
+  def connect_streams():
+    nonlocal replay_proc, current_route_name, current_route_model, current_route_idx, current_start_seconds, loading_status, paused, last_replay_started_at
+
+    if route_entries:
+      current_route_name, current_route_model = route_entries[current_route_idx]
+      loading_status = f"Starting replay for route {current_route_idx + 1}/{len(route_entries)} at {current_start_seconds}s"
+      stop_replay(replay_proc)
+      os.environ["OPENPILOT_PREFIX"] = prefix
+      messaging.reset_context()
+      replay_proc = start_replay(current_route_name, prefix, playback, data_dir, current_start_seconds)
+      paused = False
+      last_replay_started_at = time.monotonic()
+      loading_status = "Waiting for CAN socket"
+      wait_for_can_socket(prefix, REPLAY_SOCKET_WAIT_TIMEOUT_SECONDS)
+
+    loading_status = "Connecting to messaging streams"
+    sm_local = make_submaster(addr)
+    logcan_local = messaging.sub_sock("can", addr=addr, conflate=False, timeout=100)
+    loading_status = "Waiting for road camera frames"
+    return sm_local, logcan_local
+
+  sm, logcan = connect_streams()
 
   img = np.zeros((480, 640, 3), dtype='uint8')
   imgff = None
   num_px = 0
   calibration = None
-  can_range_msg_count = 0
-  active_radar_format_name = None
-  active_radar_format_miss_count = 0
-  radar_format_total_counts = {radar_spec.name: 0 for radar_spec in RADAR_SPECS}
-  radar_format_seen_addresses = build_seen_address_map()
-  radar_track_ids: dict[tuple[str, int, int], int] = {}
-  next_radar_track_id = 0
-  radar_tracks: dict[tuple[str, int, int], RadarTrackPoint] = {}
-  radar_track_last_seen: dict[tuple[str, int, int], int] = {}
-  radar_parsers: dict[str, dict[int, object]] = {}
+  (can_range_msg_count,
+   active_radar_format_name,
+   active_radar_format_miss_count,
+   radar_format_total_counts,
+   radar_format_seen_addresses,
+   radar_track_ids,
+   next_radar_track_id,
+   radar_tracks,
+   radar_track_last_seen,
+   radar_parsers) = reset_radar_state()
 
   lid_overlay_blank = get_blank_lid_overlay(UP)
 
@@ -273,11 +345,109 @@ def ui_thread(addr):
     rl.begin_drawing()
     rl.clear_background(rl.Color(64, 64, 64, 255))
 
+    shift_down = rl.is_key_down(rl.KeyboardKey.KEY_LEFT_SHIFT) or rl.is_key_down(rl.KeyboardKey.KEY_RIGHT_SHIFT)
+
+    if route_entries and rl.is_key_released(rl.KeyboardKey.KEY_SPACE):
+      if paused:
+        sm, logcan = connect_streams()
+        vipc_client = VisionIpcClient("camerad", VisionStreamType.VISION_STREAM_ROAD, True)
+      else:
+        current_start_seconds = current_offset_seconds()
+        paused = True
+        loading_status = "Paused"
+        stop_replay(replay_proc)
+        replay_proc = None
+
+    if route_entries and rl.is_key_released(rl.KeyboardKey.KEY_RIGHT):
+      current_route_idx = (current_route_idx + 1) % len(route_entries)
+      current_start_seconds = 0
+      paused = False
+      (can_range_msg_count,
+       active_radar_format_name,
+       active_radar_format_miss_count,
+       radar_format_total_counts,
+       radar_format_seen_addresses,
+       radar_track_ids,
+       next_radar_track_id,
+       radar_tracks,
+       radar_track_last_seen,
+       radar_parsers) = reset_radar_state()
+      sm, logcan = connect_streams()
+      vipc_client = VisionIpcClient("camerad", VisionStreamType.VISION_STREAM_ROAD, True)
+
+    if route_entries and rl.is_key_released(rl.KeyboardKey.KEY_LEFT):
+      current_route_idx = (current_route_idx - 1) % len(route_entries)
+      current_start_seconds = 0
+      paused = False
+      (can_range_msg_count,
+       active_radar_format_name,
+       active_radar_format_miss_count,
+       radar_format_total_counts,
+       radar_format_seen_addresses,
+       radar_track_ids,
+       next_radar_track_id,
+       radar_tracks,
+       radar_track_last_seen,
+       radar_parsers) = reset_radar_state()
+      sm, logcan = connect_streams()
+      vipc_client = VisionIpcClient("camerad", VisionStreamType.VISION_STREAM_ROAD, True)
+
+    if route_entries and rl.is_key_released(rl.KeyboardKey.KEY_M):
+      current_start_seconds = max(0, current_offset_seconds() + (-60 if shift_down else 60))
+      paused = False
+      (can_range_msg_count,
+       active_radar_format_name,
+       active_radar_format_miss_count,
+       radar_format_total_counts,
+       radar_format_seen_addresses,
+       radar_track_ids,
+       next_radar_track_id,
+       radar_tracks,
+       radar_track_last_seen,
+       radar_parsers) = reset_radar_state()
+      sm, logcan = connect_streams()
+      vipc_client = VisionIpcClient("camerad", VisionStreamType.VISION_STREAM_ROAD, True)
+
+    if route_entries and rl.is_key_released(rl.KeyboardKey.KEY_S):
+      current_start_seconds = max(0, current_offset_seconds() + (-10 if shift_down else 10))
+      paused = False
+      (can_range_msg_count,
+       active_radar_format_name,
+       active_radar_format_miss_count,
+       radar_format_total_counts,
+       radar_format_seen_addresses,
+       radar_track_ids,
+       next_radar_track_id,
+       radar_tracks,
+       radar_track_last_seen,
+       radar_parsers) = reset_radar_state()
+      sm, logcan = connect_streams()
+      vipc_client = VisionIpcClient("camerad", VisionStreamType.VISION_STREAM_ROAD, True)
+
+    if rl.is_key_released(rl.KeyboardKey.KEY_D):
+      state_checks_enabled = not state_checks_enabled
+
     yuv_img_raw = vipc_client.recv()
     if yuv_img_raw is None or not yuv_img_raw.data.any():
-      rl.draw_text_ex(font, "waiting for frames", rl.Vector2(200, 200), 30, 0, rl.WHITE)
+      if replay_proc is not None and replay_proc.poll() is not None:
+        loading_status = f"Replay exited with code {replay_proc.poll()}"
+
+      loading_lines = [
+        f"{loading_status}{' (paused)' if paused else ''}",
+        f"Route {current_route_idx + 1}/{len(route_entries)}" if route_entries else "Connected to external replay",
+        f"Platform: {current_route_model}" if current_route_model is not None else "",
+        f"Route: {current_route_name}" if current_route_name is not None else "",
+        f"Offset: {current_offset_seconds()}s" if route_entries else "",
+        f"Radar state checks: {'ON' if state_checks_enabled else 'OFF'}",
+        "Keys: SPACE play/pause, RIGHT next, LEFT prev, M +/-60s, S +/-10s, D state checks" if route_entries else "Key: D state checks",
+      ]
+      for i, line in enumerate(loading_lines):
+        if line:
+          rl.draw_text_ex(font, line, rl.Vector2(80, 160 + i * 40), 28 if i == 0 else 20, 0, rl.WHITE)
       rl.end_drawing()
       continue
+
+    loading_status = "Streaming"
 
     lid_overlay = lid_overlay_blank.copy()
     top_down = top_down_texture, lid_overlay
@@ -400,6 +570,11 @@ def ui_thread(addr):
               if ts_nanos == 0:
                 continue
 
+              if state_checks_enabled and not is_radar_track_valid(active_radar_spec, track_msg, track_prefix):
+                radar_tracks.pop(track_key, None)
+                radar_track_last_seen.pop(track_key, None)
+                continue
+
               d_rel, y_rel, v_rel, a_rel = decode_radar_track(active_radar_spec, track_msg, track_prefix)
 
               if track_key not in radar_track_ids:
@@ -467,6 +642,12 @@ def ui_thread(addr):
       (f"RADAR FORMAT: {active_radar_format_name or 'NONE'}", YELLOW),
       (f"RADAR CAN MSGS: {can_range_msg_count}", YELLOW),
       (f"RADAR TRACKS: {len(active_radar_tracks)}", YELLOW),
+      (f"RADAR STATE CHECKS: {'ON' if state_checks_enabled else 'OFF'}", YELLOW),
+      (f"ROUTE: {current_route_name}" if current_route_name is not None else "", YELLOW),
+      (f"PLATFORM: {current_route_model}" if current_route_model is not None else "", YELLOW),
+      (f"OFFSET: {current_offset_seconds()}s" if route_entries else "", YELLOW),
+      (f"STATUS: {'PAUSED' if paused else 'PLAYING'}" if route_entries else "", YELLOW),
+      ("KEYS: SPACE play/pause, RIGHT next, LEFT prev, M +/-60s, S +/-10s, D state checks" if route_entries else "KEY: D state checks", YELLOW),
       ("ANGLE OFFSET (AVG): " + str(round(sm['liveParameters'].angleOffsetAverageDeg, 2)) + " deg", YELLOW),
       ("ANGLE OFFSET (INSTANT): " + str(round(sm['liveParameters'].angleOffsetDeg, 2)) + " deg", YELLOW),
       ("STIFFNESS: " + str(round(sm['liveParameters'].stiffnessFactor * 100.0, 2)) + " %", YELLOW),
@@ -484,6 +665,7 @@ def ui_thread(addr):
   rl.unload_texture(top_down_texture)
   rl.unload_font(font)
   rl.close_window()
+  stop_replay(replay_proc)
 
 
 def get_arg_parser():
@@ -491,6 +673,8 @@ def get_arg_parser():
 
   parser.add_argument("ip_address", nargs="?", default="127.0.0.1", help="The ip address on which to receive zmq messages.")
   parser.add_argument("--route", default=None, help="Route to replay locally before opening the UI.")
+  parser.add_argument("--routes", action="store_true", help="Cycle Hyundai/Kia/Genesis routes from opendbc/car/tests/routes.py.")
+  parser.add_argument("--custom-routes", action="store_true", help="Cycle routes from tools/replay/custom_routes.py.")
   parser.add_argument("--data-dir", default=None, help="Optional local route data directory to pass to replay.")
   parser.add_argument("--playback", default="1.0", help="Replay playback speed when using --route.")
   parser.add_argument("--prefix", default="ui-replay", help="OPENPILOT_PREFIX to use when launching replay from the UI.")
@@ -500,18 +684,24 @@ def get_arg_parser():
 
 if __name__ == "__main__":
   args = get_arg_parser().parse_args(sys.argv[1:])
-  replay_proc = None
 
+  selected_sources = int(args.route is not None) + int(args.routes) + int(args.custom_routes)
+  if selected_sources > 1:
+    raise SystemExit("Use only one of --route, --routes, or --custom-routes.")
+
+  route_entries = None
   if args.route is not None:
+    route_entries = [(args.route, "MANUAL_ROUTE")]
+  elif args.routes:
+    route_entries = get_hkg_routes()
+  elif args.custom_routes:
+    route_entries = get_custom_routes()
+
+  if route_entries:
     os.environ["OPENPILOT_PREFIX"] = args.prefix
     messaging.reset_context()
-    replay_proc = start_replay(args.route, args.prefix, args.playback, args.data_dir)
-    wait_for_can_socket(args.prefix, REPLAY_SOCKET_WAIT_TIMEOUT_SECONDS)
   elif args.ip_address != "127.0.0.1":
     os.environ["ZMQ"] = "1"
     messaging.reset_context()
 
-  try:
-    ui_thread(args.ip_address)
-  finally:
-    stop_replay(replay_proc)
+  ui_thread(args.ip_address, route_entries=route_entries, playback=args.playback, data_dir=args.data_dir, prefix=args.prefix)

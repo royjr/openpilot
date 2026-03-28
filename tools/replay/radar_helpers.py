@@ -197,3 +197,13 @@ def decode_radar_track(radar_spec: RadarSpec, track_msg, track_prefix: str) -> t
     track_msg["REL_SPEED"],
     track_msg["REL_ACCEL"],
   )
+
+
+def is_radar_track_valid(radar_spec: RadarSpec, track_msg, track_prefix: str) -> bool:
+  if radar_spec.name == "RADAR_602_611":
+    return track_msg[f"{track_prefix}DISTANCE"] != 255.75
+
+  if radar_spec.name == "RADAR_210_21F":
+    return track_msg[f"{track_prefix}STATE"] in (3, 4)
+
+  return track_msg["STATE"] in (3, 4)
