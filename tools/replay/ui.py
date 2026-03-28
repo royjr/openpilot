@@ -215,7 +215,7 @@ def reset_radar_state():
   )
 
 
-def ui_thread(addr, route_entries=None, playback="1.0", data_dir=None, prefix="ui-replay"):
+def ui_thread(addr, route_entries=None, playback="1.0", data_dir=None, prefix="ui-replay", start_route_idx=0):
   cv2.setNumThreads(1)
 
   # Get monitor info before creating window
@@ -257,7 +257,7 @@ def ui_thread(addr, route_entries=None, playback="1.0", data_dir=None, prefix="u
   top_down_texture = rl.load_texture_from_image(top_down_image)
   rl.unload_image(top_down_image)
 
-  current_route_idx = 0
+  current_route_idx = start_route_idx
   current_route_name = None
   current_route_model = None
   replay_proc = None
@@ -691,7 +691,8 @@ def get_arg_parser():
   parser.add_argument("ip_address", nargs="?", default="127.0.0.1", help="The ip address on which to receive zmq messages.")
   parser.add_argument("--route", default=None, help="Route to replay locally before opening the UI.")
   parser.add_argument("--routes", action="store_true", help="Cycle Hyundai/Kia/Genesis routes from opendbc/car/tests/routes.py.")
-  parser.add_argument("--custom-routes", action="store_true", help="Cycle routes from tools/replay/custom_routes.py.")
+  parser.add_argument("--custom-routes", nargs="?", type=int, const=1, default=None,
+                      help="Cycle routes from tools/replay/custom_routes.py, optionally starting from a 1-based route index.")
   parser.add_argument("--data-dir", default=None, help="Optional local route data directory to pass to replay.")
   parser.add_argument("--playback", default="1.0", help="Replay playback speed when using --route.")
   parser.add_argument("--prefix", default="ui-replay", help="OPENPILOT_PREFIX to use when launching replay from the UI.")
@@ -702,17 +703,19 @@ def get_arg_parser():
 if __name__ == "__main__":
   args = get_arg_parser().parse_args(sys.argv[1:])
 
-  selected_sources = int(args.route is not None) + int(args.routes) + int(args.custom_routes)
+  selected_sources = int(args.route is not None) + int(args.routes) + int(args.custom_routes is not None)
   if selected_sources > 1:
     raise SystemExit("Use only one of --route, --routes, or --custom-routes.")
 
   route_entries = None
+  start_route_idx = 0
   if args.route is not None:
     route_entries = [(args.route, "MANUAL_ROUTE")]
   elif args.routes:
     route_entries = get_hkg_routes()
-  elif args.custom_routes:
+  elif args.custom_routes is not None:
     route_entries = get_custom_routes()
+    start_route_idx = max(0, min(len(route_entries) - 1, args.custom_routes - 1))
 
   if route_entries:
     os.environ["OPENPILOT_PREFIX"] = args.prefix
@@ -721,4 +724,4 @@ if __name__ == "__main__":
     os.environ["ZMQ"] = "1"
     messaging.reset_context()
 
-  ui_thread(args.ip_address, route_entries=route_entries, playback=args.playback, data_dir=args.data_dir, prefix=args.prefix)
+  ui_thread(args.ip_address, route_entries=route_entries, playback=args.playback, data_dir=args.data_dir, prefix=args.prefix, start_route_idx=start_route_idx)
