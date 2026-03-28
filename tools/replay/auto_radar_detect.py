@@ -50,12 +50,14 @@ class RadarFamily:
 
 
 RADAR_FAMILIES = (
+  RadarFamily("RADAR_500_51F", 0x500, 32),
   RadarFamily("RADAR_210_21F", 0x210, 16),
   RadarFamily("RADAR_3A5_3C4", 0x3A5, 32),
   RadarFamily("RADAR_602_611", 0x602, 16),
 )
 
 RADAR_FAMILY_COLORS = {
+  "RADAR_500_51F": ANSI_CYAN,
   "RADAR_210_21F": ANSI_YELLOW,
   "RADAR_3A5_3C4": ANSI_GREEN,
   "RADAR_602_611": ANSI_BLUE,

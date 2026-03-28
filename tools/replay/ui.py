@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import math
 import os
 import sys
 import tempfile
@@ -31,6 +32,8 @@ from msgq.visionipc import VisionIpcClient, VisionStreamType
 os.environ['BASEDIR'] = BASEDIR
 
 ANGLE_SCALE = 5.0
+RADAR_500_51F_ADDR = 0x500
+RADAR_500_51F_COUNT = 32
 RADAR_602_611_ADDR = 0x602
 RADAR_602_611_COUNT = 16
 RADAR_210_21F_ADDR = 0x210
@@ -41,6 +44,19 @@ RADAR_3A5_3C4_TRACK_LEN = 24
 RADAR_TRACK_TIMEOUT_FRAMES = 10
 RADAR_TRACK_RADIUS = 4
 CAMERA_RADAR_Y_OFFSET = 25
+RADAR_500_51F_DBC_TEMPLATE = """
+BO_ {addr_dec} RADAR_TRACK_{addr_hex}: 8 RADAR
+ SG_ UNKNOWN_1 : 7|8@0- (1,0) [-128|127] "" XXX
+ SG_ AZIMUTH : 12|10@0- (0.2,0) [-102.4|102.2] "" XXX
+ SG_ STATE : 15|3@0+ (1,0) [0|7] "" XXX
+ SG_ LONG_DIST : 18|11@0+ (0.1,0) [0|204.7] "" XXX
+ SG_ REL_ACCEL : 33|10@0- (0.02,0) [-10.24|10.22] "" XXX
+ SG_ ZEROS : 37|4@0+ (1,0) [0|255] "" XXX
+ SG_ COUNTER : 38|1@0+ (1,0) [0|1] "" XXX
+ SG_ STATE_3 : 39|1@0+ (1,0) [0|1] "" XXX
+ SG_ REL_SPEED : 53|14@0- (0.01,0) [-81.92|81.92] "" XXX
+ SG_ STATE_2 : 55|2@0+ (1,0) [0|3] "" XXX
+"""
 RADAR_3A5_3C4_DBC_TEMPLATE = """
 BO_ {addr_dec} RADAR_TRACK_{addr_hex}: 24 RADAR
  SG_ CHECKSUM : 0|16@1+ (1,0) [0|65535] "" XXX
@@ -126,6 +142,7 @@ BO_ {addr_dec} RADAR_TRACK_{addr_hex}: 8 RADAR
 """
 
 RADAR_FORMATS = (
+  RadarFormat("RADAR_500_51F", RADAR_500_51F_ADDR, RADAR_500_51F_COUNT, RADAR_500_51F_DBC_TEMPLATE, ("",)),
   RadarFormat("RADAR_3A5_3C4", RADAR_3A5_3C4_ADDR, RADAR_3A5_3C4_COUNT, RADAR_3A5_3C4_DBC_TEMPLATE, ("",)),
   RadarFormat("RADAR_210_21F", RADAR_210_21F_ADDR, RADAR_210_21F_COUNT, RADAR_210_21F_DBC_TEMPLATE, ("1_", "2_")),
   RadarFormat("RADAR_602_611", RADAR_602_611_ADDR, RADAR_602_611_COUNT, RADAR_602_611_DBC_TEMPLATE, ("1_", "2_"), has_state=False),
@@ -157,7 +174,7 @@ def get_radar_can_parser(radar_format: RadarFormat, bus: int) -> CANParser:
 
 
 def get_track_storage_key(radar_format: RadarFormat, bus: int, addr: int, track_prefix: str) -> tuple[str, int, int]:
-  if radar_format.name == "RADAR_3A5_3C4":
+  if radar_format.name in ("RADAR_500_51F", "RADAR_3A5_3C4"):
     return (radar_format.name, bus, addr)
 
   track_index = int(track_prefix[0]) - 1
@@ -442,6 +459,16 @@ def ui_thread(addr):
                 y_rel = track_msg[f"{track_prefix}LAT_DIST"]
                 v_rel = track_msg[f"{track_prefix}REL_SPEED"]
                 a_rel = float("nan")
+              elif active_radar_format.name == "RADAR_500_51F":
+                # if track_msg["STATE"] not in (3, 4):
+                #   radar_tracks.pop(track_key, None)
+                #   radar_track_last_seen.pop(track_key, None)
+                #   continue
+                azimuth = math.radians(track_msg["AZIMUTH"])
+                d_rel = math.cos(azimuth) * track_msg["LONG_DIST"]
+                y_rel = 0.5 * -math.sin(azimuth) * track_msg["LONG_DIST"]
+                v_rel = track_msg["REL_SPEED"]
+                a_rel = track_msg["REL_ACCEL"]
               else:
                 # if track_msg["STATE"] not in (3, 4):
                 #   radar_tracks.pop(track_key, None)
