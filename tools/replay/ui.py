@@ -42,6 +42,7 @@ RADAR_3A5_3C4_ADDR = 0x3A5
 RADAR_3A5_3C4_COUNT = 32
 RADAR_3A5_3C4_TRACK_LEN = 24
 RADAR_TRACK_TIMEOUT_FRAMES = 10
+RADAR_FORMAT_SWITCH_MISS_FRAMES = 30
 RADAR_TRACK_RADIUS = 4
 CAMERA_RADAR_Y_OFFSET = 25
 RADAR_500_51F_DBC_TEMPLATE = """
@@ -274,6 +275,8 @@ def ui_thread(addr):
   calibration = None
   can_range_msg_count = 0
   active_radar_format_name = None
+  active_radar_format_miss_count = 0
+  radar_format_total_counts = {radar_format.name: 0 for radar_format in RADAR_FORMATS}
   radar_track_ids: dict[tuple[str, int, int], int] = {}
   next_radar_track_id = 0
   radar_tracks: dict[tuple[str, int, int], RadarTrackPoint] = {}
@@ -407,14 +410,30 @@ def ui_thread(addr):
         if radar_format is not None:
           can_range_msg_count += 1
           detected_format_counts[radar_format.name] += 1
+          radar_format_total_counts[radar_format.name] += 1
           if radar_format.name not in radar_parsers:
             radar_parsers[radar_format.name] = {}
           if msg.src not in radar_parsers[radar_format.name]:
             radar_parsers[radar_format.name][msg.src] = get_radar_can_parser(radar_format, msg.src)
 
-      best_format_name = max(detected_format_counts, key=detected_format_counts.get)
-      if detected_format_counts[best_format_name] > 0:
-        active_radar_format_name = best_format_name
+      formats_seen_this_update = [name for name, count in detected_format_counts.items() if count > 0]
+      if active_radar_format_name is None and formats_seen_this_update:
+        active_radar_format_name = max(
+          formats_seen_this_update,
+          key=lambda name: radar_format_total_counts[name],
+        )
+        active_radar_format_miss_count = 0
+      elif active_radar_format_name is not None:
+        if detected_format_counts[active_radar_format_name] > 0:
+          active_radar_format_miss_count = 0
+        else:
+          active_radar_format_miss_count += 1
+          if formats_seen_this_update and active_radar_format_miss_count >= RADAR_FORMAT_SWITCH_MISS_FRAMES:
+            active_radar_format_name = max(
+              formats_seen_this_update,
+              key=lambda name: radar_format_total_counts[name],
+            )
+            active_radar_format_miss_count = 0
 
       active_radar_format = next((fmt for fmt in RADAR_FORMATS if fmt.name == active_radar_format_name), None)
       if active_radar_format is not None:
