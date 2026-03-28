@@ -48,9 +48,9 @@ class RadarFamily:
 
 
 RADAR_FAMILIES = (
-  RadarFamily("MRR30", 0x210, 16),
-  RadarFamily("MRR35", 0x3A5, 32),
-  RadarFamily("MRREVO14F", 0x602, 16),
+  RadarFamily("RADAR_210_21F", 0x210, 16),
+  RadarFamily("RADAR_3A5_3C4", 0x3A5, 32),
+  RadarFamily("RADAR_602_611", 0x602, 16),
 )
 
 

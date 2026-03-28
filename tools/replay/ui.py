@@ -31,17 +31,17 @@ from msgq.visionipc import VisionIpcClient, VisionStreamType
 os.environ['BASEDIR'] = BASEDIR
 
 ANGLE_SCALE = 5.0
-MRREVO14F_RADAR_ADDR = 0x602
-MRREVO14F_RADAR_COUNT = 16
-MRR30_RADAR_ADDR = 0x210
-MRR30_RADAR_COUNT = 16
-MRR35_RADAR_ADDR = 0x3A5
-MRR35_RADAR_COUNT = 32
-MRR35_TRACK_LEN = 24
-MRR35_TRACK_TIMEOUT_FRAMES = 10
+RADAR_602_611_ADDR = 0x602
+RADAR_602_611_COUNT = 16
+RADAR_210_21F_ADDR = 0x210
+RADAR_210_21F_COUNT = 16
+RADAR_3A5_3C4_ADDR = 0x3A5
+RADAR_3A5_3C4_COUNT = 32
+RADAR_3A5_3C4_TRACK_LEN = 24
+RADAR_TRACK_TIMEOUT_FRAMES = 10
 RADAR_TRACK_RADIUS = 4
 CAMERA_RADAR_Y_OFFSET = 25
-MRR35_RADAR_DBC_TEMPLATE = """
+RADAR_3A5_3C4_DBC_TEMPLATE = """
 BO_ {addr_dec} RADAR_TRACK_{addr_hex}: 24 RADAR
  SG_ CHECKSUM : 0|16@1+ (1,0) [0|65535] "" XXX
  SG_ COUNTER : 16|8@1+ (1,0) [0|255] "" XXX
@@ -88,7 +88,7 @@ class RadarFormat:
     return self.start_addr + self.msg_count - 1
 
 
-MRR30_RADAR_DBC_TEMPLATE = """
+RADAR_210_21F_DBC_TEMPLATE = """
 BO_ {addr_dec} RADAR_TRACK_{addr_hex}: 32 RADAR
  SG_ CHECKSUM : 0|16@1+ (1,0) [0|65535] "" XXX
  SG_ COUNTER : 16|8@1+ (1,0) [0|255] "" XXX
@@ -114,7 +114,7 @@ BO_ {addr_dec} RADAR_TRACK_{addr_hex}: 32 RADAR
  SG_ 2_REL_ACCEL : 246|10@1- (1,0) [0|1023] "" XXX
 """
 
-MRREVO14F_RADAR_DBC_TEMPLATE = """
+RADAR_602_611_DBC_TEMPLATE = """
 BO_ {addr_dec} RADAR_TRACK_{addr_hex}: 8 RADAR
  SG_ 1_DISTANCE : 0|10@1+ (0.25,0) [0|255.75] "" XXX
  SG_ 1_LATERAL : 10|11@1+ (0.03,-30.705) [-30.705|30.705] "" XXX
@@ -126,9 +126,9 @@ BO_ {addr_dec} RADAR_TRACK_{addr_hex}: 8 RADAR
 """
 
 RADAR_FORMATS = (
-  RadarFormat("MRR35", MRR35_RADAR_ADDR, MRR35_RADAR_COUNT, MRR35_RADAR_DBC_TEMPLATE, ("",)),
-  RadarFormat("MRR30", MRR30_RADAR_ADDR, MRR30_RADAR_COUNT, MRR30_RADAR_DBC_TEMPLATE, ("1_", "2_")),
-  RadarFormat("MRREVO14F", MRREVO14F_RADAR_ADDR, MRREVO14F_RADAR_COUNT, MRREVO14F_RADAR_DBC_TEMPLATE, ("1_", "2_"), has_state=False),
+  RadarFormat("RADAR_3A5_3C4", RADAR_3A5_3C4_ADDR, RADAR_3A5_3C4_COUNT, RADAR_3A5_3C4_DBC_TEMPLATE, ("",)),
+  RadarFormat("RADAR_210_21F", RADAR_210_21F_ADDR, RADAR_210_21F_COUNT, RADAR_210_21F_DBC_TEMPLATE, ("1_", "2_")),
+  RadarFormat("RADAR_602_611", RADAR_602_611_ADDR, RADAR_602_611_COUNT, RADAR_602_611_DBC_TEMPLATE, ("1_", "2_"), has_state=False),
 )
 
 
@@ -157,7 +157,7 @@ def get_radar_can_parser(radar_format: RadarFormat, bus: int) -> CANParser:
 
 
 def get_track_storage_key(radar_format: RadarFormat, bus: int, addr: int, track_prefix: str) -> tuple[str, int, int]:
-  if radar_format.name == "MRR35":
+  if radar_format.name == "RADAR_3A5_3C4":
     return (radar_format.name, bus, addr)
 
   track_index = int(track_prefix[0]) - 1
@@ -415,16 +415,16 @@ def ui_thread(addr):
             track_msg = parser.vl[msg_name]
             for track_prefix in active_radar_format.track_prefixes:
               track_key = get_track_storage_key(active_radar_format, bus, track_addr, track_prefix)
-              if active_radar_format.name == "MRREVO14F":
+              if active_radar_format.name == "RADAR_602_611":
                 ts_nanos = parser.ts_nanos[msg_name][f"{track_prefix}DISTANCE"]
-              elif active_radar_format.name == "MRR30":
+              elif active_radar_format.name == "RADAR_210_21F":
                 ts_nanos = parser.ts_nanos[msg_name][f"{track_prefix}LONG_DIST"]
               else:
                 ts_nanos = parser.ts_nanos[msg_name]["LONG_DIST"]
               if ts_nanos == 0:
                 continue
 
-              if active_radar_format.name == "MRREVO14F":
+              if active_radar_format.name == "RADAR_602_611":
                 d_rel = track_msg[f"{track_prefix}DISTANCE"]
                 # if d_rel == 255.75:
                 #   radar_tracks.pop(track_key, None)
@@ -433,7 +433,7 @@ def ui_thread(addr):
                 y_rel = track_msg[f"{track_prefix}LATERAL"]
                 v_rel = track_msg[f"{track_prefix}SPEED"]
                 a_rel = float("nan")
-              elif active_radar_format.name == "MRR30":
+              elif active_radar_format.name == "RADAR_210_21F":
                 # if track_msg[f"{track_prefix}STATE"] not in (3, 4):
                 #   radar_tracks.pop(track_key, None)
                 #   radar_track_last_seen.pop(track_key, None)
@@ -467,7 +467,7 @@ def ui_thread(addr):
 
       stale_tracks = [
         track_key for track_key, last_seen in radar_track_last_seen.items()
-        if (sm.frame - last_seen) > MRR35_TRACK_TIMEOUT_FRAMES
+        if (sm.frame - last_seen) > RADAR_TRACK_TIMEOUT_FRAMES
       ]
       for track_key in stale_tracks:
         radar_track_last_seen.pop(track_key, None)
