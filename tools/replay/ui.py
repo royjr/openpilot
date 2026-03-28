@@ -91,6 +91,25 @@ def draw_radar_points_camera(tracks, img, calibration):
       cv2.circle(img, (x, y), RADAR_TRACK_RADIUS, (255, 255, 255), thickness=-1, lineType=cv2.LINE_AA)
 
 
+def draw_loading_overlay(font, lines, camera_texture, top_down_texture, hor_mode, panel_x, panel_y):
+  rl.draw_texture(camera_texture, 0, 0, rl.WHITE)  # noqa: TID251
+  rl.draw_texture(top_down_texture, 640, 0, rl.WHITE)  # noqa: TID251
+
+  if hor_mode:
+    panel_width = 620
+    panel_height = 300
+  else:
+    panel_width = 700
+    panel_height = 320
+
+  rl.draw_rectangle(panel_x - 20, panel_y - 30, panel_width, panel_height, rl.Color(0, 0, 0, 140))
+  rl.draw_rectangle_lines(panel_x - 20, panel_y - 30, panel_width, panel_height, rl.Color(255, 255, 255, 90))
+
+  for i, line in enumerate(lines):
+    if line:
+      rl.draw_text_ex(font, line, rl.Vector2(panel_x, panel_y + i * 40), 28 if i == 0 else 20, 0, rl.WHITE)
+
+
 def start_replay(route: str, prefix: str, playback: str, data_dir: str | None, start_seconds: int) -> subprocess.Popen:
   cmd = [
     REPLAY_PATH,
@@ -441,9 +460,7 @@ def ui_thread(addr, route_entries=None, playback="1.0", data_dir=None, prefix="u
         f"Radar state checks: {'ON' if state_checks_enabled else 'OFF'}",
         "Keys: SPACE play/pause, RIGHT next, LEFT prev, M +/-60s, S +/-10s, D state checks" if route_entries else "Key: D state checks",
       ]
-      for i, line in enumerate(loading_lines):
-        if line:
-          rl.draw_text_ex(font, line, rl.Vector2(80, 160 + i * 40), 28 if i == 0 else 20, 0, rl.WHITE)
+      draw_loading_overlay(font, loading_lines, camera_texture, top_down_texture, hor_mode, 80, 160)
       rl.end_drawing()
       continue
 
