@@ -30,6 +30,8 @@ ANSI_DIM = "\033[2m"
 ANSI_RED = "\033[31m"
 ANSI_GREEN = "\033[32m"
 ANSI_YELLOW = "\033[33m"
+ANSI_BLUE = "\033[34m"
+ANSI_MAGENTA = "\033[35m"
 ANSI_CYAN = "\033[36m"
 
 
@@ -52,6 +54,12 @@ RADAR_FAMILIES = (
   RadarFamily("RADAR_3A5_3C4", 0x3A5, 32),
   RadarFamily("RADAR_602_611", 0x602, 16),
 )
+
+RADAR_FAMILY_COLORS = {
+  "RADAR_210_21F": ANSI_YELLOW,
+  "RADAR_3A5_3C4": ANSI_GREEN,
+  "RADAR_602_611": ANSI_BLUE,
+}
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
@@ -245,9 +253,12 @@ def print_results(results: list[dict]) -> None:
   print(f"{'Car Model':<{CAR_MODEL_WIDTH}}  {'Detected':<{RADAR_TYPE_WIDTH}}  Route")
   print("-" * (CAR_MODEL_WIDTH + RADAR_TYPE_WIDTH + 9 + 60))
   for result in results:
-    detected = "" if result["detected"] == "NONE" else result["detected"]
+    detected_plain = "" if result["detected"] == "NONE" else result["detected"]
     model = format_car_model(result["car_model"])[:CAR_MODEL_WIDTH]
-    print(f"{model:<{CAR_MODEL_WIDTH}}  {detected:<{RADAR_TYPE_WIDTH}}  {result['route']}")
+    detected = f"{detected_plain:<{RADAR_TYPE_WIDTH}}"
+    if supports_color() and detected_plain:
+      detected = f"{colorize_detected(detected_plain)}" + " " * max(0, RADAR_TYPE_WIDTH - len(detected_plain))
+    print(f"{model:<{CAR_MODEL_WIDTH}}  {detected}  {result['route']}")
 
 
 def supports_color() -> bool:
@@ -265,7 +276,8 @@ def colorize_detected(detected: str) -> str:
   if not supports_color():
     return detected
 
-  return f"{ANSI_GREEN}{detected}{ANSI_RESET}"
+  color = RADAR_FAMILY_COLORS.get(detected, ANSI_MAGENTA)
+  return f"{color}{detected}{ANSI_RESET}"
 
 
 def print_progress_line(index: int, total: int, route: CarTestRoute, detected: str) -> None:
