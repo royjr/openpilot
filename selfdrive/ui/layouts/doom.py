@@ -63,6 +63,7 @@ class DoomJoystick:
     self._thread = None
     self.connected = False
     self._last_debug_values: dict[str, int] = {}
+    self._debug_order: list[str] = []
     self.move = 0.0
     self.turn = 0.0
     self.fire_pressed = False
@@ -151,8 +152,11 @@ class DoomJoystick:
     prev = self._last_debug_values.get(code)
     if prev == state:
       return
+    if code not in self._last_debug_values:
+      self._debug_order.append(code)
     self._last_debug_values[code] = state
-    print(f"[doom joystick] {code}={state}", flush=True)
+    parts = [f"{name}={self._last_debug_values[name]}" for name in self._debug_order]
+    print("[doom joystick] " + " ".join(parts), flush=True)
 
 
 class DoomLayout(NavWidget):
