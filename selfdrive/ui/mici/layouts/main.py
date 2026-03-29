@@ -132,7 +132,7 @@ class MiciMainLayout(Scroller):
     if gui_app.widget_in_stack(self._onboarding_window):
       return
 
-    if active_widget == self:
+    if active_widget in (self, self._games_layout, self._home_layout, self._alerts_layout, self._onroad_layout):
       self._handle_menu_joystick()
       return
 
