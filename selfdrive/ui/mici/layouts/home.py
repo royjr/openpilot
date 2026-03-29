@@ -4,6 +4,7 @@ import time
 from cereal import log
 import pyray as rl
 from collections.abc import Callable
+from openpilot.system.ui.widgets.button import Button, ButtonStyle
 from openpilot.system.ui.widgets import Widget
 from openpilot.system.ui.widgets.layouts import HBoxLayout
 from openpilot.system.ui.widgets.icon_widget import IconWidget
@@ -84,6 +85,7 @@ class MiciHomeLayout(Widget):
   def __init__(self):
     super().__init__()
     self._on_settings_click: Callable | None = None
+    self._on_doom_click: Callable | None = None
 
     self._last_refresh = 0
     self._mouse_down_t: None | float = None
@@ -109,6 +111,8 @@ class MiciHomeLayout(Widget):
     self._date_label = UnifiedLabel("", font_size=36, text_color=rl.GRAY, font_weight=FontWeight.ROMAN, max_width=480, wrap_text=False)
     self._branch_label = UnifiedLabel("", font_size=36, text_color=rl.GRAY, font_weight=FontWeight.ROMAN, scroll=True)
     self._version_commit_label = UnifiedLabel("", font_size=36, text_color=rl.GRAY, font_weight=FontWeight.ROMAN, max_width=480, wrap_text=False)
+    self._doom_button = Button("DOOM", click_callback=lambda: self._on_doom_click() if self._on_doom_click else None,
+                               button_style=ButtonStyle.DANGER, font_size=18)
 
   def show_event(self):
     super().show_event()
@@ -141,8 +145,9 @@ class MiciHomeLayout(Widget):
       self._last_refresh = rl.get_time()
       self._update_params()
 
-  def set_callbacks(self, on_settings: Callable | None = None):
+  def set_callbacks(self, on_settings: Callable | None = None, on_doom: Callable | None = None):
     self._on_settings_click = on_settings
+    self._on_doom_click = on_doom
 
   def _handle_mouse_release(self, mouse_pos: MousePos):
     if not self._did_long_press:
@@ -169,6 +174,8 @@ class MiciHomeLayout(Widget):
     return version, branch, commit[:7], date_str
 
   def _render(self, _):
+    footer_h = 48
+
     # TODO: why is there extra space here to get it to be flush?
     text_pos = rl.Vector2(self.rect.x - 2 + HOME_PADDING, self.rect.y - 16)
     self._openpilot_label.set_position(text_pos.x, text_pos.y)
@@ -201,5 +208,14 @@ class MiciHomeLayout(Widget):
     self._experimental_icon.set_visible(self._experimental_mode)
     self._mic_icon.set_visible(ui_state.recording_audio)
 
-    footer_rect = rl.Rectangle(self.rect.x + HOME_PADDING, self.rect.y + self.rect.height - 48, self.rect.width - HOME_PADDING, 48)
+    footer_rect = rl.Rectangle(self.rect.x + HOME_PADDING, self.rect.y + self.rect.height - footer_h, self.rect.width - HOME_PADDING, footer_h)
     self._status_bar_layout.render(footer_rect)
+    visible_widgets = [widget for widget in self._status_bar_layout.widgets if widget.is_visible]
+    icon_group_w = sum(widget.rect.width for widget in visible_widgets)
+    if visible_widgets:
+      icon_group_w += 18 * (len(visible_widgets) - 1)
+    doom_w = min(104, max(84, self.rect.width * 0.23))
+    doom_h = min(40, max(34, footer_h - 8))
+    doom_x = footer_rect.x + icon_group_w + 16
+    doom_y = footer_rect.y + (footer_h - doom_h) / 2
+    self._doom_button.render(rl.Rectangle(doom_x, doom_y, doom_w, doom_h))
