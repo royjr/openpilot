@@ -19,6 +19,7 @@ from typing import NamedTuple
 from importlib.resources import as_file, files
 from openpilot.common.swaglog import cloudlog
 from openpilot.system.hardware import HARDWARE, PC
+from openpilot.system.ui.lib.live_stream import STREAM_ENABLED, UILiveStream
 from openpilot.system.ui.lib.multilang import multilang
 from openpilot.common.realtime import Ratekeeper
 
@@ -218,6 +219,7 @@ class GuiApplication:
     self._ffmpeg_queue: queue.Queue | None = None
     self._ffmpeg_thread: threading.Thread | None = None
     self._ffmpeg_stop_event: threading.Event | None = None
+    self._live_stream: UILiveStream | None = UILiveStream() if STREAM_ENABLED else None
     self._textures: dict[str, rl.Texture] = {}
     self._target_fps: int = _DEFAULT_FPS
     self._last_fps_log_time: float = time.monotonic()
@@ -278,7 +280,7 @@ class GuiApplication:
 
       rl.init_window(self._scaled_width, self._scaled_height, title)
 
-      needs_render_texture = self._scale != 1.0 or BURN_IN_MODE or RECORD
+      needs_render_texture = self._scale != 1.0 or BURN_IN_MODE or RECORD or STREAM_ENABLED
       if self._scale != 1.0:
         rl.set_mouse_scale(1 / self._scale, 1 / self._scale)
       if needs_render_texture:
@@ -315,6 +317,9 @@ class GuiApplication:
         self._ffmpeg_stop_event = threading.Event()
         self._ffmpeg_thread = threading.Thread(target=self._ffmpeg_writer_thread, daemon=True)
         self._ffmpeg_thread.start()
+
+      if self._live_stream is not None:
+        self._live_stream.start()
 
       # OFFSCREEN disables FPS limiting for fast offline rendering (e.g. clips)
       rl.set_target_fps(0 if OFFSCREEN else fps)
@@ -652,11 +657,14 @@ class GuiApplication:
 
         rl.end_drawing()
 
-        if RECORD:
+        if RECORD or self._live_stream is not None:
           image = rl.load_image_from_texture(self._render_texture.texture)
           data_size = image.width * image.height * 4
           data = bytes(rl.ffi.buffer(image.data, data_size))
-          self._ffmpeg_queue.put(data)  # Async write via background thread
+          if RECORD:
+            self._ffmpeg_queue.put(data)  # Async write via background thread
+          if self._live_stream is not None:
+            self._live_stream.update_rgba(image.width, image.height, data)
           rl.unload_image(image)
 
         self._monitor_fps()
