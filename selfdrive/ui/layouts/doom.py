@@ -68,14 +68,14 @@ class DoomJoystick:
     self.fire_pressed = False
     self.restart_pressed = False
 
-    if HARDWARE.get_device_type() == "pc":
-      self._move_axis = "ABS_Z"
-      self._turn_axis = "ABS_RX"
-      self._flip_map = {"ABS_RZ": self._move_axis}
-    else:
-      self._move_axis = "ABS_RX"
-      self._turn_axis = "ABS_Z"
-      self._flip_map = {"ABS_RY": self._move_axis}
+    # if HARDWARE.get_device_type() == "pc":
+    #   self._move_axis = "ABS_Z"
+    #   self._turn_axis = "ABS_RX"
+    #   self._flip_map = {"ABS_RZ": self._move_axis}
+    # else:
+    self._move_axis = "ABS_RX"
+    self._turn_axis = "ABS_Z"
+    self._flip_map = {"ABS_RY": self._move_axis}
 
     self._min_axis_value = {self._move_axis: 0.0, self._turn_axis: 0.0}
     self._max_axis_value = {self._move_axis: 255.0, self._turn_axis: 255.0}
