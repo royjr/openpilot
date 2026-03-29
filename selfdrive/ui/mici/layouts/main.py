@@ -122,7 +122,7 @@ class MiciMainLayout(Scroller):
     return [self._alerts_layout, self._games_layout, self._onroad_layout]
 
   def _current_outer_page_idx(self) -> int:
-    current_pos = -self._scroller._scroller.scroll_panel.get_offset()
+    current_pos = -self._scroller.scroll_panel.get_offset()
     pages = self._outer_pages()
     return min(range(len(pages)), key=lambda i: abs(pages[i].rect.x - current_pos))
 
