@@ -27,6 +27,7 @@ class DinoLayout(NavWidget):
     self._on_hide: Callable[[], None] | None = None
     self._font = gui_app.font(FontWeight.BOLD)
     self._hud_font = gui_app.font(FontWeight.MEDIUM)
+    self._hud_rect = rl.Rectangle(0, 0, 0, 0)
     self._game_rect = rl.Rectangle(0, 0, 0, 0)
     self._ui_scale = 1.0
     self._hotz_texture = None
@@ -62,9 +63,11 @@ class DinoLayout(NavWidget):
 
   def _update_layout_rects(self):
     self._ui_scale = max(0.48, min(1.0, min(self._rect.width / 1920.0, self._rect.height / 1080.0)))
-    margin = 14.0 * self._ui_scale
-    top = 30.0 * self._ui_scale
-    self._game_rect = rl.Rectangle(self._rect.x + margin, self._rect.y + top, self._rect.width - margin * 2, self._rect.height - top - margin)
+    margin = 12.0 * self._ui_scale
+    hud_h = 76.0 * self._ui_scale
+    top_h = 96.0 * self._ui_scale
+    self._hud_rect = rl.Rectangle(self._rect.x + margin, self._rect.y + margin, self._rect.width - margin * 2, hud_h)
+    self._game_rect = rl.Rectangle(self._rect.x + margin, self._rect.y + top_h, self._rect.width - margin * 2, self._rect.height - top_h)
     if self._dino_y == 0.0:
       self._dino_y = self._ground_y() - self._dino_h()
 
@@ -243,12 +246,25 @@ class DinoLayout(NavWidget):
   def _draw_hud(self):
     score_text = f"SCORE {int(self._score):05d}"
     speed_text = f"SPEED {int(self._speed):04d}"
-    font_size = 28.0 * self._ui_scale
-    rl.draw_text_ex(self._hud_font, "DINOPILOT", rl.Vector2(self._game_rect.x, self._game_rect.y), 34.0 * self._ui_scale, 0, GREEN)
+    title_font = 34.0 * self._ui_scale
+    stat_font = 34.0 * self._ui_scale
+    sub_font = 18.0 * self._ui_scale
+    rl.draw_rectangle_rounded(self._hud_rect, 0.22, 12, rl.Color(0, 22, 0, 210))
+    rl.draw_text_ex(self._font, score_text, rl.Vector2(self._hud_rect.x + 30 * self._ui_scale, self._hud_rect.y + 22 * self._ui_scale), stat_font, 0, WHITE)
 
-    score_size = measure_text_cached(self._font, score_text, font_size)
-    rl.draw_text_ex(self._font, score_text, rl.Vector2(self._game_rect.x + self._game_rect.width - score_size.x, self._game_rect.y + 2.0 * self._ui_scale), font_size, 0, WHITE)
-    rl.draw_text_ex(self._hud_font, speed_text, rl.Vector2(self._game_rect.x, self._game_rect.y + 38.0 * self._ui_scale), 22.0 * self._ui_scale, 0, rl.Color(180, 220, 180, 255))
+    speed_size = measure_text_cached(self._font, speed_text, stat_font)
+    rl.draw_text_ex(self._font, speed_text,
+                    rl.Vector2(self._hud_rect.x + self._hud_rect.width - speed_size.x - 30 * self._ui_scale, self._hud_rect.y + 22 * self._ui_scale),
+                    stat_font, 0, WHITE)
+
+    rl.draw_text_ex(self._hud_font, "DINOPILOT",
+                    rl.Vector2(self._hud_rect.x + 30 * self._ui_scale, self._hud_rect.y + self._hud_rect.height - 28 * self._ui_scale),
+                    sub_font, 0, GREEN)
+    time_text = f"TIME {self._score / 100.0:05.1f}"
+    time_size = measure_text_cached(self._hud_font, time_text, sub_font)
+    rl.draw_text_ex(self._hud_font, time_text,
+                    rl.Vector2(self._hud_rect.x + self._hud_rect.width - time_size.x - 30 * self._ui_scale, self._hud_rect.y + self._hud_rect.height - 28 * self._ui_scale),
+                    sub_font, 0, rl.Color(180, 220, 180, 255))
 
   def _draw_game_over(self):
     text = "TAP TO RUN AGAIN"
