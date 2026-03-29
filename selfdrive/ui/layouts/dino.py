@@ -34,7 +34,7 @@ class DinoLayout(NavWidget):
   def _reset(self):
     self._dead = False
     self._score = 0.0
-    self._speed = 620.0
+    self._speed = 300.0
     self._dino_y = 0.0
     self._dino_vy = 0.0
     self._obstacles: list[dict[str, float]] = []
@@ -109,8 +109,8 @@ class DinoLayout(NavWidget):
     remaining = []
     for obstacle in self._obstacles:
       obstacle["x"] -= self._speed * dt
-      obstacle_rect = rl.Rectangle(obstacle["x"], obstacle["y"], obstacle["w"], obstacle["h"])
-      if obstacle["x"] + obstacle["w"] > self._game_rect.x:
+      obstacle_rect = self._obstacle_rect(obstacle)
+      if obstacle_rect.x + obstacle_rect.width > self._game_rect.x:
         remaining.append(obstacle)
       if rl.check_collision_recs(dino_rect, obstacle_rect):
         self._dead = True
@@ -121,8 +121,8 @@ class DinoLayout(NavWidget):
       self._dino_vy = JUMP_VELOCITY * self._ui_scale
 
   def _spawn_obstacle(self):
-    c_w = 26.0 * self._ui_scale
     c_h = random.choice([55.0, 72.0, 88.0]) * self._ui_scale
+    c_w = c_h if self._hotz_mode else 26.0 * self._ui_scale
     self._obstacles.append({
       "x": self._game_rect.x + self._game_rect.width + random.uniform(0, 80) * self._ui_scale,
       "y": self._ground_y() - c_h,
@@ -144,6 +144,30 @@ class DinoLayout(NavWidget):
     x = self._game_rect.x + 100.0 * self._ui_scale
     return rl.Rectangle(x, self._dino_y, self._dino_w(), self._dino_h())
 
+  def _obstacle_rect(self, obstacle: dict[str, float]) -> rl.Rectangle:
+    return rl.Rectangle(obstacle["x"], obstacle["y"], obstacle["w"], obstacle["h"])
+
+  def _draw_chrome_dino(self, dino: rl.Rectangle):
+    body = rl.Color(40, 40, 40, 255)
+    eye = rl.WHITE if not self._dead else rl.Color(255, 120, 120, 255)
+
+    rl.draw_rectangle(int(dino.x + 12 * self._ui_scale), int(dino.y + 14 * self._ui_scale),
+                      int(30 * self._ui_scale), int(30 * self._ui_scale), body)
+    rl.draw_rectangle(int(dino.x + 32 * self._ui_scale), int(dino.y + 2 * self._ui_scale),
+                      int(18 * self._ui_scale), int(22 * self._ui_scale), body)
+    rl.draw_rectangle(int(dino.x + 22 * self._ui_scale), int(dino.y + 44 * self._ui_scale),
+                      int(26 * self._ui_scale), int(8 * self._ui_scale), body)
+    rl.draw_rectangle(int(dino.x + 48 * self._ui_scale), int(dino.y + 22 * self._ui_scale),
+                      int(10 * self._ui_scale), int(8 * self._ui_scale), body)
+    rl.draw_rectangle(int(dino.x + 50 * self._ui_scale), int(dino.y + 16 * self._ui_scale),
+                      int(6 * self._ui_scale), int(10 * self._ui_scale), body)
+    rl.draw_rectangle(int(dino.x + 18 * self._ui_scale), int(dino.y + dino.height),
+                      int(6 * self._ui_scale), int(16 * self._ui_scale), body)
+    rl.draw_rectangle(int(dino.x + 34 * self._ui_scale), int(dino.y + dino.height),
+                      int(6 * self._ui_scale), int(16 * self._ui_scale), body)
+    rl.draw_rectangle(int(dino.x + 34 * self._ui_scale), int(dino.y + 10 * self._ui_scale),
+                      int(3 * self._ui_scale), int(3 * self._ui_scale), eye)
+
   def _draw_world(self):
     ground_y = self._ground_y()
     rl.draw_line(int(self._game_rect.x), int(ground_y), int(self._game_rect.x + self._game_rect.width), int(ground_y), rl.BLACK)
@@ -156,20 +180,20 @@ class DinoLayout(NavWidget):
 
     # Dino body
     dino = self._dino_rect()
-    rl.draw_rectangle_rounded(dino, 0.14, 8, rl.Color(40, 40, 40, 255))
-    rl.draw_rectangle(int(dino.x + dino.width * 0.58), int(dino.y - 18.0 * self._ui_scale), int(18.0 * self._ui_scale), int(24.0 * self._ui_scale), rl.Color(40, 40, 40, 255))
-    rl.draw_circle(int(dino.x + dino.width * 0.75), int(dino.y + dino.height * 0.22), max(1, int(3 * self._ui_scale)), rl.WHITE if not self._dead else rl.Color(255, 120, 120, 255))
-    rl.draw_line(int(dino.x + 12 * self._ui_scale), int(dino.y + dino.height), int(dino.x + 12 * self._ui_scale), int(dino.y + dino.height + 16 * self._ui_scale), rl.BLACK)
-    rl.draw_line(int(dino.x + 36 * self._ui_scale), int(dino.y + dino.height), int(dino.x + 36 * self._ui_scale), int(dino.y + dino.height + 16 * self._ui_scale), rl.BLACK)
+    self._draw_chrome_dino(dino)
 
     for obstacle in self._obstacles:
-      rect = rl.Rectangle(obstacle["x"], obstacle["y"], obstacle["w"], obstacle["h"])
+      rect = self._obstacle_rect(obstacle)
       if self._hotz_mode and self._hotz_texture is not None and self._hotz_texture.width > 0 and self._hotz_texture.height > 0:
         src = rl.Rectangle(0, 0, self._hotz_texture.width, self._hotz_texture.height)
         rl.draw_texture_pro(self._hotz_texture, src, rect, rl.Vector2(0, 0), 0.0, rl.WHITE)
         continue
-      rl.draw_rectangle_rounded(rect, 0.18, 6, rl.Color(60, 120, 60, 255))
-      rl.draw_line(int(rect.x + rect.width / 2), int(rect.y), int(rect.x + rect.width / 2), int(rect.y + rect.height), rl.Color(235, 255, 235, 120))
+      body = rl.Color(60, 120, 60, 255)
+      glow = rl.Color(225, 255, 225, 140)
+      rl.draw_rectangle(int(rect.x + rect.width * 0.35), int(rect.y), int(rect.width * 0.3), int(rect.height), body)
+      rl.draw_rectangle(int(rect.x), int(rect.y + rect.height * 0.2), int(rect.width * 0.28), int(rect.height * 0.24), body)
+      rl.draw_rectangle(int(rect.x + rect.width * 0.72), int(rect.y + rect.height * 0.42), int(rect.width * 0.28), int(rect.height * 0.18), body)
+      rl.draw_line(int(rect.x + rect.width * 0.5), int(rect.y), int(rect.x + rect.width * 0.5), int(rect.y + rect.height), glow)
 
   def _draw_hud(self):
     score_text = f"SCORE {int(self._score):05d}"
