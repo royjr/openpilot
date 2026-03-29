@@ -112,7 +112,7 @@ class MiciHomeLayout(Widget):
     self._branch_label = UnifiedLabel("", font_size=36, text_color=rl.GRAY, font_weight=FontWeight.ROMAN, scroll=True)
     self._version_commit_label = UnifiedLabel("", font_size=36, text_color=rl.GRAY, font_weight=FontWeight.ROMAN, max_width=480, wrap_text=False)
     self._doom_button = Button("DOOM", click_callback=lambda: self._on_doom_click() if self._on_doom_click else None,
-                               button_style=ButtonStyle.DANGER, font_size=18)
+                               button_style=ButtonStyle.DANGER, font_size=20)
 
   def show_event(self):
     super().show_event()
@@ -214,7 +214,7 @@ class MiciHomeLayout(Widget):
     icon_group_w = sum(widget.rect.width for widget in visible_widgets)
     if visible_widgets:
       icon_group_w += 18 * (len(visible_widgets) - 1)
-    doom_w = min(104, max(84, self.rect.width * 0.23))
+    doom_w = min(104, max(84, self.rect.width * 0.2))
     doom_h = min(40, max(34, footer_h - 8))
     doom_x = footer_rect.x + icon_group_w + 16
     doom_y = footer_rect.y + (footer_h - doom_h) / 2
