@@ -3,6 +3,7 @@ import cereal.messaging as messaging
 from openpilot.selfdrive.ui.layouts.doom import DoomLayout
 from openpilot.selfdrive.ui.layouts.dino import DinoLayout
 from openpilot.selfdrive.ui.mici.layouts.dino_home import DinoHomeLayout
+from openpilot.selfdrive.ui.mici.layouts.doom_home import DoomHomeLayout
 from openpilot.selfdrive.ui.mici.layouts.home import MiciHomeLayout
 from openpilot.selfdrive.ui.mici.layouts.settings.settings import SettingsLayout
 from openpilot.selfdrive.ui.mici.layouts.offroad_alerts import MiciOffroadAlerts
@@ -30,6 +31,7 @@ class MiciMainLayout(Scroller):
 
     # Initialize widgets
     self._home_layout = MiciHomeLayout()
+    self._doom_home_layout = DoomHomeLayout()
     self._dino_home_layout = DinoHomeLayout()
     self._games_layout = Scroller(horizontal=False, snap_items=True, spacing=0, pad=0, scroll_indicator=False, edge_shadows=False)
     self._doom_layout = DoomLayout()
@@ -39,12 +41,13 @@ class MiciMainLayout(Scroller):
     self._onroad_layout = AugmentedRoadView(bookmark_callback=self._on_bookmark_clicked)
 
     # Initialize widget rects
-    for widget in (self._home_layout, self._dino_home_layout, self._games_layout, self._settings_layout, self._alerts_layout, self._onroad_layout):
+    for widget in (self._home_layout, self._doom_home_layout, self._dino_home_layout, self._games_layout, self._settings_layout, self._alerts_layout, self._onroad_layout):
       # TODO: set parent rect and use it if never passed rect from render (like in Scroller)
       widget.set_rect(rl.Rectangle(0, 0, gui_app.width, gui_app.height))
 
     self._games_layout._scroller.add_widgets([
       self._home_layout,
+      self._doom_home_layout,
       self._dino_home_layout,
     ])
     self._games_layout._scroller.set_reset_scroll_at_show(False)
@@ -71,8 +74,9 @@ class MiciMainLayout(Scroller):
       gui_app.push_widget(self._onboarding_window)
 
   def _setup_callbacks(self):
-    self._home_layout.set_callbacks(on_settings=lambda: gui_app.push_widget(self._settings_layout),
-                                    on_doom=lambda: gui_app.push_widget(self._doom_layout))
+    self._home_layout.set_callbacks(on_settings=lambda: gui_app.push_widget(self._settings_layout))
+    self._doom_home_layout.set_callbacks(on_settings=lambda: gui_app.push_widget(self._settings_layout),
+                                         on_doom=lambda: gui_app.push_widget(self._doom_layout))
     self._dino_home_layout.set_callbacks(on_settings=lambda: gui_app.push_widget(self._settings_layout),
                                          on_dino=lambda: gui_app.push_widget(self._dino_layout))
     self._onroad_layout.set_click_callback(lambda: self._scroll_to_games(self._home_layout))

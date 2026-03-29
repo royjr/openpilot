@@ -109,7 +109,7 @@ class MiciHomeLayout(Widget):
       self._mic_icon,
     ], spacing=18)
 
-    self._doom_label = UnifiedLabel("doom", font_size=96, font_weight=FontWeight.DISPLAY, text_color=rl.Color(226, 44, 44, 255),
+    self._doom_label = UnifiedLabel("open", font_size=96, font_weight=FontWeight.DISPLAY, text_color=rl.WHITE,
                                     max_width=480, wrap_text=False)
     self._pilot_label = UnifiedLabel("pilot", font_size=96, font_weight=FontWeight.DISPLAY, text_color=rl.WHITE,
                                      max_width=480, wrap_text=False)
