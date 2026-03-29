@@ -49,6 +49,9 @@ RADAR_TRACK_TIMEOUT_FRAMES = 10
 RADAR_FORMAT_SWITCH_MISS_FRAMES = 30
 RADAR_TRACK_RADIUS = 4
 CAMERA_RADAR_Y_OFFSET = 25
+RADAR_HEATMAP_DECAY = 0.975
+RADAR_HEATMAP_ALPHA = 0.65
+CAMERA_RADAR_HEATMAP_ALPHA = 0.45
 REPLAY_PATH = os.path.join(os.path.dirname(__file__), "replay")
 REPLAY_SOCKET_WAIT_TIMEOUT_SECONDS = 10.0
 REPLAY_SPEEDS = (0.2, 0.5, 1.0, 2.0, 4.0, 8.0)
@@ -57,6 +60,7 @@ CAMERA_DRAW_HEIGHT = 480
 TOP_DOWN_DRAW_WIDTH = 384
 PLOT_DRAW_WIDTH = 480
 PLOT_DRAW_HEIGHT = 480
+RADAR_HEATMAP_MODES = ("OFF", "TOP", "CAMERA", "BOTH")
 
 
 @dataclass
@@ -75,6 +79,51 @@ def draw_radar_points(tracks, lid_overlay):
     px, py = to_topdown_pt(track.dRel, -track.yRel)
     if px != -1:
       cv2.circle(lid_overlay, (py, px), RADAR_TRACK_RADIUS, 255, thickness=-1, lineType=cv2.LINE_AA)
+
+
+def update_radar_heatmap(tracks, radar_heatmap):
+  radar_heatmap *= RADAR_HEATMAP_DECAY
+  for track in tracks:
+    px, py = to_topdown_pt(track.dRel, -track.yRel)
+    if px != -1:
+      cv2.circle(radar_heatmap, (py, px), RADAR_TRACK_RADIUS + 2, 255.0, thickness=-1, lineType=cv2.LINE_AA)
+
+
+def update_radar_camera_heatmap(tracks, radar_heatmap, calibration, shape):
+  radar_heatmap *= RADAR_HEATMAP_DECAY
+  if calibration is None:
+    return
+
+  height, width = shape[:2]
+  for track in tracks:
+    if track.dRel <= 0.0:
+      continue
+
+    pt = calibration.car_space_to_bb(
+      np.asarray([track.dRel - RADAR_TO_CAMERA]),
+      np.asarray([-track.yRel]),
+      np.asarray([1.0]),
+    )
+    x, y = np.round(pt[0]).astype(int)
+    y += CAMERA_RADAR_Y_OFFSET
+    if 0 <= x < width and 0 <= y < height:
+      cv2.circle(radar_heatmap, (x, y), RADAR_TRACK_RADIUS + 3, 255.0, thickness=-1, lineType=cv2.LINE_AA)
+
+
+def overlay_heatmap(img, radar_heatmap, alpha_scale):
+  radar_heat_uint8 = np.ascontiguousarray(np.clip(radar_heatmap, 0, 255).astype(np.uint8))
+  radar_heat_mask = radar_heat_uint8 > 0
+  if not np.any(radar_heat_mask):
+    return
+
+  heat_rgb = cv2.cvtColor(cv2.applyColorMap(radar_heat_uint8, cv2.COLORMAP_TURBO), cv2.COLOR_BGR2RGB).astype(np.float32)
+  img_rgb = img.astype(np.float32)
+  alpha = ((radar_heat_uint8.astype(np.float32) / 255.0) * alpha_scale)[..., None]
+  img[:] = np.where(
+    radar_heat_mask[..., None],
+    np.clip(img_rgb * (1.0 - alpha) + heat_rgb * alpha, 0, 255).astype(np.uint8),
+    img,
+  )
 
 
 def draw_radar_points_camera(tracks, img, calibration):
@@ -277,6 +326,7 @@ def ui_thread(addr, route_entries=None, playback="1.0", data_dir=None, prefix="u
   current_start_seconds = 0
   paused = False
   state_checks_enabled = False
+  radar_heatmap_mode_idx = 0
   current_playback = min(REPLAY_SPEEDS, key=lambda speed: abs(speed - float(playback)))
   last_replay_started_at = time.monotonic()
   loading_status = "Initializing UI"
@@ -325,6 +375,8 @@ def ui_thread(addr, route_entries=None, playback="1.0", data_dir=None, prefix="u
    radar_parsers) = reset_radar_state()
 
   lid_overlay_blank = get_blank_lid_overlay(UP)
+  radar_heatmap = np.zeros_like(lid_overlay_blank, dtype=np.float32)
+  camera_radar_heatmap = np.zeros(img.shape[:2], dtype=np.float32)
 
   # plots
   name_to_arr_idx = {
@@ -405,6 +457,8 @@ def ui_thread(addr, route_entries=None, playback="1.0", data_dir=None, prefix="u
        radar_tracks,
        radar_track_last_seen,
        radar_parsers) = reset_radar_state()
+      radar_heatmap.fill(0)
+      camera_radar_heatmap.fill(0)
       sm, logcan = connect_streams()
       vipc_client = VisionIpcClient("camerad", VisionStreamType.VISION_STREAM_ROAD, True)
 
@@ -422,6 +476,8 @@ def ui_thread(addr, route_entries=None, playback="1.0", data_dir=None, prefix="u
        radar_tracks,
        radar_track_last_seen,
        radar_parsers) = reset_radar_state()
+      radar_heatmap.fill(0)
+      camera_radar_heatmap.fill(0)
       sm, logcan = connect_streams()
       vipc_client = VisionIpcClient("camerad", VisionStreamType.VISION_STREAM_ROAD, True)
 
@@ -438,6 +494,8 @@ def ui_thread(addr, route_entries=None, playback="1.0", data_dir=None, prefix="u
        radar_tracks,
        radar_track_last_seen,
        radar_parsers) = reset_radar_state()
+      radar_heatmap.fill(0)
+      camera_radar_heatmap.fill(0)
       sm, logcan = connect_streams()
       vipc_client = VisionIpcClient("camerad", VisionStreamType.VISION_STREAM_ROAD, True)
 
@@ -474,6 +532,8 @@ def ui_thread(addr, route_entries=None, playback="1.0", data_dir=None, prefix="u
          radar_tracks,
          radar_track_last_seen,
          radar_parsers) = reset_radar_state()
+        radar_heatmap.fill(0)
+        camera_radar_heatmap.fill(0)
         sm, logcan = connect_streams()
         vipc_client = VisionIpcClient("camerad", VisionStreamType.VISION_STREAM_ROAD, True)
 
@@ -494,11 +554,19 @@ def ui_thread(addr, route_entries=None, playback="1.0", data_dir=None, prefix="u
          radar_tracks,
          radar_track_last_seen,
          radar_parsers) = reset_radar_state()
+        radar_heatmap.fill(0)
+        camera_radar_heatmap.fill(0)
         sm, logcan = connect_streams()
         vipc_client = VisionIpcClient("camerad", VisionStreamType.VISION_STREAM_ROAD, True)
 
     if rl.is_key_released(rl.KeyboardKey.KEY_D):
       state_checks_enabled = not state_checks_enabled
+
+    if rl.is_key_released(rl.KeyboardKey.KEY_H):
+      radar_heatmap_mode_idx = (radar_heatmap_mode_idx + 1) % len(RADAR_HEATMAP_MODES)
+      if RADAR_HEATMAP_MODES[radar_heatmap_mode_idx] == "OFF":
+        radar_heatmap.fill(0)
+        camera_radar_heatmap.fill(0)
 
     yuv_img_raw = vipc_client.recv()
     if yuv_img_raw is None or not yuv_img_raw.data.any():
@@ -513,7 +581,8 @@ def ui_thread(addr, route_entries=None, playback="1.0", data_dir=None, prefix="u
         f"Offset: {current_offset_seconds()}s" if route_entries else "",
         f"Playback: {current_playback:.1f}x" if route_entries else "",
         f"Radar state checks: {'ON' if state_checks_enabled else 'OFF'}",
-        "Keys: SPACE play/pause, RIGHT next, LEFT prev, M +/-60s, S +/-10s, +/- speed, D state checks" if route_entries else "Key: D state checks",
+        f"Radar heatmap: {RADAR_HEATMAP_MODES[radar_heatmap_mode_idx]}",
+        "Keys: SPACE play/pause, RIGHT next, LEFT prev, M +/-60s, S +/-10s, +/- speed, D state checks, H heatmap" if route_entries else "Keys: D state checks, H heatmap",
       ]
       draw_loading_overlay(font, loading_lines, camera_texture, top_down_texture, hor_mode, 80, 160)
       rl.end_drawing()
@@ -682,6 +751,13 @@ def ui_thread(addr, route_entries=None, playback="1.0", data_dir=None, prefix="u
       active_radar_tracks = sm['liveTracks'].points
       active_radar_buses = []
 
+    radar_heatmap_mode = RADAR_HEATMAP_MODES[radar_heatmap_mode_idx]
+    if radar_heatmap_mode in ("TOP", "BOTH"):
+      update_radar_heatmap(active_radar_tracks, radar_heatmap)
+    if radar_heatmap_mode in ("CAMERA", "BOTH"):
+      update_radar_camera_heatmap(active_radar_tracks, camera_radar_heatmap, calibration, img.shape)
+      overlay_heatmap(img, camera_radar_heatmap, CAMERA_RADAR_HEATMAP_ALPHA)
+
     # draw decoded radar tracks when present, otherwise fall back to liveTracks
     draw_radar_points(active_radar_tracks, top_down[1])
     draw_radar_points_camera(active_radar_tracks, img, calibration)
@@ -720,6 +796,8 @@ def ui_thread(addr, route_entries=None, playback="1.0", data_dir=None, prefix="u
     # Convert lid_overlay to RGBA and update top_down texture
     # lid_overlay is (384, 960), need to transpose to (960, 384) for row-major RGBA buffer
     lid_rgba = palette[lid_overlay.T]
+    if radar_heatmap_mode in ("TOP", "BOTH"):
+      overlay_heatmap(lid_rgba[..., :3], radar_heatmap.T, RADAR_HEATMAP_ALPHA)
     rl.update_texture(top_down_texture, rl.ffi.cast("void *", np.ascontiguousarray(lid_rgba).ctypes.data))
     rl.draw_texture(top_down_texture, CAMERA_DRAW_WIDTH, 0, rl.WHITE)  # noqa: TID251
 
@@ -736,12 +814,13 @@ def ui_thread(addr, route_entries=None, playback="1.0", data_dir=None, prefix="u
        + (f" (BUS {','.join(str(bus) for bus in active_radar_buses)})" if active_radar_buses else ""),
        YELLOW),
       (f"RADAR STATE CHECKS: {'ON' if state_checks_enabled else 'OFF'}", YELLOW),
+      (f"RADAR HEATMAP: {RADAR_HEATMAP_MODES[radar_heatmap_mode_idx]}", YELLOW),
       (f"ROUTE: {current_route_name}" if current_route_name is not None else "", YELLOW),
       (f"PLATFORM: {current_route_model}" if current_route_model is not None else "", YELLOW),
       (f"OFFSET: {current_offset_seconds()}s" if route_entries else "", YELLOW),
       (f"PLAYBACK: {current_playback:.1f}x" if route_entries else "", YELLOW),
       (f"STATUS: {'PAUSED' if paused else 'PLAYING'}" if route_entries else "", YELLOW),
-      ("KEYS: SPACE play/pause, RIGHT next, LEFT prev, M +/-60s, S +/-10s, +/- speed, D state checks" if route_entries else "KEY: D state checks", YELLOW),
+      ("KEYS: SPACE play/pause, RIGHT next, LEFT prev, M +/-60s, S +/-10s, +/- speed, D state checks, H heatmap" if route_entries else "KEYS: D state checks, H heatmap", YELLOW),
       ("ANGLE OFFSET (AVG): " + str(round(sm['liveParameters'].angleOffsetAverageDeg, 2)) + " deg", YELLOW),
       ("ANGLE OFFSET (INSTANT): " + str(round(sm['liveParameters'].angleOffsetDeg, 2)) + " deg", YELLOW),
       ("STIFFNESS: " + str(round(sm['liveParameters'].stiffnessFactor * 100.0, 2)) + " %", YELLOW),
