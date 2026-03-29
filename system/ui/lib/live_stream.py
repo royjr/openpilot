@@ -9,7 +9,6 @@ import time
 STREAM_ENABLED = os.getenv("UI_STREAM") == "1"
 STREAM_HOST = os.getenv("UI_STREAM_HOST", "0.0.0.0")
 STREAM_PORT = int(os.getenv("UI_STREAM_PORT", "8765"))
-STREAM_FPS = float(os.getenv("UI_STREAM_FPS", "3.0"))
 
 HTML = """<!doctype html>
 <html>
@@ -52,26 +51,9 @@ HTML = """<!doctype html>
       img.src = "/frame.bmp?t=" + Date.now();
       meta.textContent = "updated " + new Date().toLocaleTimeString();
     }
-    let inFlight = false;
-    function loop() {
-      if (inFlight) return;
-      inFlight = true;
-      const next = new Image();
-      next.onload = () => {
-        img.src = next.src;
-        meta.textContent = "connected " + new Date().toLocaleTimeString();
-        inFlight = false;
-        setTimeout(loop, 1000 / 3);
-      };
-      next.onerror = () => {
-        meta.textContent = "waiting for frames...";
-        inFlight = false;
-        setTimeout(loop, 1000);
-      };
-      next.src = "/frame.bmp?t=" + Date.now();
-    }
-    loop();
-</script>
+    setInterval(refresh, 200);
+    img.onload = () => { meta.textContent = "connected " + new Date().toLocaleTimeString(); };
+  </script>
 </body>
 </html>
 """
@@ -88,8 +70,6 @@ class UILiveStream:
     self._lock = threading.Lock()
     self._frame_bytes = b""
     self._started = False
-    self._min_interval = 1.0 / max(STREAM_FPS, 0.25)
-    self._last_update = 0.0
 
   def start(self):
     if self._started:
@@ -112,10 +92,7 @@ class UILiveStream:
           self.send_header("Content-Length", str(len(data)))
           self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
           self.end_headers()
-          try:
-            self.wfile.write(data)
-          except (BrokenPipeError, ConnectionResetError):
-            pass
+          self.wfile.write(data)
           return
 
         body = HTML.encode("utf-8")
@@ -123,10 +100,7 @@ class UILiveStream:
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
-        try:
-          self.wfile.write(body)
-        except (BrokenPipeError, ConnectionResetError):
-          pass
+        self.wfile.write(body)
 
       def log_message(self, fmt, *args):
         return
@@ -137,13 +111,9 @@ class UILiveStream:
     print(f"[ui-stream] serving http://{self.host}:{self.port}", flush=True)
 
   def update_rgba(self, width: int, height: int, rgba_bytes: bytes):
-    now = time.monotonic()
-    if now - self._last_update < self._min_interval:
-      return
     bmp = _rgba_to_bmp(width, height, rgba_bytes)
     with self._lock:
       self._frame_bytes = bmp
-    self._last_update = now
 
 
 def _rgba_to_bmp(width: int, height: int, rgba_bytes: bytes) -> bytes:
@@ -151,7 +121,7 @@ def _rgba_to_bmp(width: int, height: int, rgba_bytes: bytes) -> bytes:
   row_pad = (4 - (row_stride % 4)) % 4
   pixel_data = bytearray()
 
-  for y in range(height):
+  for y in range(height - 1, -1, -1):
     row_start = y * width * 4
     for x in range(width):
       i = row_start + x * 4
@@ -170,7 +140,7 @@ def _rgba_to_bmp(width: int, height: int, rgba_bytes: bytes) -> bytes:
   bmp.extend(struct.pack("<I", 54))
   bmp.extend(struct.pack("<I", 40))
   bmp.extend(struct.pack("<i", width))
-  bmp.extend(struct.pack("<i", -height))
+  bmp.extend(struct.pack("<i", height))
   bmp.extend(struct.pack("<H", 1))
   bmp.extend(struct.pack("<H", 24))
   bmp.extend(struct.pack("<I", 0))
