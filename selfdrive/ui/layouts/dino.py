@@ -7,6 +7,7 @@ import pyray as rl
 from openpilot.system.ui.lib.application import FontWeight, MousePos, gui_app
 from openpilot.system.ui.lib.text_measure import measure_text_cached
 from openpilot.system.ui.widgets.nav_widget import NavWidget
+from openpilot.selfdrive.ui.layouts.game_audio import ensure_audio_device
 from openpilot.selfdrive.ui.ui_state import ui_state
 
 GRAVITY = 2200.0
@@ -18,8 +19,6 @@ DINO_MUSIC_PATH = os.path.join(LAYOUT_DIR, "dino.mp3")
 GREEN = rl.Color(80, 170, 80, 255)
 WHITE = rl.Color(245, 245, 245, 255)
 BLACK = rl.Color(8, 8, 8, 255)
-
-_AUDIO_READY = False
 
 
 class DinoLayout(NavWidget):
@@ -103,14 +102,10 @@ class DinoLayout(NavWidget):
       self._hotz_texture = rl.load_texture(HOTZ_PATH)
 
   def _ensure_audio_loaded(self):
-    global _AUDIO_READY
     if self._audio_loaded:
       return
 
-    if not _AUDIO_READY:
-      rl.init_audio_device()
-      _AUDIO_READY = True
-
+    ensure_audio_device(rl)
     self._music = rl.load_music_stream(DINO_MUSIC_PATH)
     rl.set_music_volume(self._music, 0.55)
     self._audio_loaded = True

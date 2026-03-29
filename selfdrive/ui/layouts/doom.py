@@ -11,6 +11,7 @@ from openpilot.system.ui.lib.application import FontWeight, MouseEvent, MousePos
 from openpilot.system.ui.lib.text_measure import measure_text_cached
 from openpilot.system.ui.widgets.nav_widget import NavWidget
 from openpilot.system.hardware import HARDWARE, PC
+from openpilot.selfdrive.ui.layouts.game_audio import ensure_audio_device
 from openpilot.selfdrive.ui.ui_state import ui_state
 
 try:
@@ -53,9 +54,6 @@ class Enemy:
   x: float
   y: float
   alive: bool = True
-
-
-_AUDIO_READY = False
 
 
 class DoomJoystick:
@@ -654,14 +652,10 @@ class DoomLayout(NavWidget):
         return
 
   def _ensure_audio_loaded(self):
-    global _AUDIO_READY
     if self._audio_loaded:
       return
 
-    if not _AUDIO_READY:
-      rl.init_audio_device()
-      _AUDIO_READY = True
-
+    ensure_audio_device(rl)
     self._music = rl.load_music_stream(DOOM_MUSIC_PATH)
     self._death_sound = rl.load_sound(DOOM_DIE_PATH)
     self._success_sound = None
