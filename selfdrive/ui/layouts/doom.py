@@ -495,6 +495,8 @@ class DoomLayout(NavWidget):
   def _tick_audio(self):
     if self._audio_loaded and self._music is not None:
       rl.update_music_stream(self._music)
+      if not self._win and not self._dead and not rl.is_music_stream_playing(self._music):
+        rl.play_music_stream(self._music)
 
   def _start_music(self):
     if not self._audio_loaded:
