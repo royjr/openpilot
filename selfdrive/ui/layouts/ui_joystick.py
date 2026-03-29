@@ -1,3 +1,4 @@
+import math
 import threading
 import time
 
@@ -32,6 +33,9 @@ class UIJoystickManager:
     self._hat_x = 0.0
     self._hat_y = 0.0
     self._button_edges: dict[str, bool] = {}
+    self._button_states: dict[str, int] = {}
+    self._debug_order: list[str] = []
+    self._last_debug_line = ""
 
     self.move = 0.0
     self.turn = 0.0
@@ -87,6 +91,7 @@ class UIJoystickManager:
           self.turn = 0.0
           self.menu_x = 0.0
           self.menu_y = 0.0
+          self._emit_debug_locked(reason="disconnected")
         time.sleep(0.1)
         continue
 
@@ -102,19 +107,26 @@ class UIJoystickManager:
 
     with self._lock:
       if code in ("ABS_HAT0X", "ABS_HAT0Y"):
+        self._remember_debug(code)
         if code == "ABS_HAT0X":
           self._hat_x = float(state)
         else:
           self._hat_y = float(state)
+        self._button_states[code] = state
         self._update_menu_axes()
+        self._emit_debug_locked(reason=code)
         return
 
       if code.startswith("BTN_"):
+        self._remember_debug(code)
         if state == 1:
           self._button_edges[code] = True
+        self._button_states[code] = state
+        self._emit_debug_locked(reason=code)
         return
 
       if code in self._axes_values:
+        self._remember_debug(code)
         self._max_axis_value[code] = max(state, self._max_axis_value[code])
         self._min_axis_value[code] = min(state, self._min_axis_value[code])
         low = self._min_axis_value[code]
@@ -126,15 +138,46 @@ class UIJoystickManager:
         norm = norm if abs(norm) > 0.05 else 0.0
         expo = 0.4
         self._axes_values[code] = expo * norm ** 3 + (1 - expo) * norm
+        self._button_states[code] = state
         self.move = self._axes_values[self._move_axis]
         self.turn = -self._axes_values[self._turn_axis]
         self._update_menu_axes()
+        self._emit_debug_locked(reason=code)
 
   def _update_menu_axes(self):
     analog_x = self._axes_values[self._menu_x_axis]
     analog_y = self._axes_values[self._menu_y_axis]
     self.menu_x = self._hat_x if abs(self._hat_x) >= abs(analog_x) else analog_x
     self.menu_y = self._hat_y if abs(self._hat_y) >= abs(analog_y) else analog_y
+
+  def _remember_debug(self, code: str):
+    if code not in self._debug_order:
+      self._debug_order.append(code)
+
+  def _emit_debug_locked(self, reason: str):
+    parts = [
+      f"connected={int(self.connected)}",
+      f"move={self.move:+.2f}",
+      f"turn={self.turn:+.2f}",
+      f"menu_x={self.menu_x:+.2f}",
+      f"menu_y={self.menu_y:+.2f}",
+      f"hat_x={self._hat_x:+.0f}",
+      f"hat_y={self._hat_y:+.0f}",
+      f"reason={reason}",
+    ]
+    for name in self._debug_order:
+      value = self._button_states.get(name)
+      if value is None:
+        continue
+      if isinstance(value, float):
+        if math.isfinite(value):
+          parts.append(f"{name}={value:+.2f}")
+      else:
+        parts.append(f"{name}={value}")
+    line = "[ui joystick] " + " ".join(parts)
+    if line != self._last_debug_line:
+      self._last_debug_line = line
+      print(line, flush=True)
 
 
 ui_joystick = UIJoystickManager()

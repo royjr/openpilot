@@ -31,6 +31,7 @@ class MiciMainLayout(Scroller):
     self._games_scroll_lock_until = 0.0
     self._joystick_next_x = 0.0
     self._joystick_next_y = 0.0
+    self._last_menu_debug = ""
 
     # Initialize widgets
     self._home_layout = MiciHomeLayout()
@@ -141,28 +142,36 @@ class MiciMainLayout(Scroller):
   def _handle_menu_joystick(self):
     now = rl.get_time()
     menu_x, menu_y = ui_joystick.get_menu_axes()
+    debug_line = f"[menu joystick] page={self._current_outer_page_idx()} x={menu_x:+.2f} y={menu_y:+.2f} next_x={self._joystick_next_x:.2f} next_y={self._joystick_next_y:.2f}"
+    if (abs(menu_x) >= 0.2 or abs(menu_y) >= 0.2) and debug_line != self._last_menu_debug:
+      self._last_menu_debug = debug_line
+      print(debug_line, flush=True)
 
     if abs(menu_x) >= 0.55 and now >= self._joystick_next_x:
       direction = 1 if menu_x > 0 else -1
       idx = self._current_outer_page_idx()
       next_idx = max(0, min(len(self._outer_pages()) - 1, idx + direction))
       if next_idx != idx:
+        print(f"[menu joystick] horizontal move {idx}->{next_idx}", flush=True)
         self._scroll_outer_to(self._outer_pages()[next_idx])
       self._joystick_next_x = now + 0.18
     elif abs(menu_x) < 0.3:
       self._joystick_next_x = 0.0
 
     if abs(menu_y) >= 0.55 and now >= self._joystick_next_y and self._current_outer_page_idx() == 1:
+      print(f"[menu joystick] vertical cycle {'next' if menu_y < 0 else 'prev'}", flush=True)
       self._home_layout.cycle_selected_game(1 if menu_y < 0 else -1)
       self._joystick_next_y = now + 0.18
     elif abs(menu_y) < 0.3:
       self._joystick_next_y = 0.0
 
     if ui_joystick.consume_primary() and self._current_outer_page_idx() == 1:
+      print("[menu joystick] launch selected game", flush=True)
       self._home_layout.launch_selected_game()
 
     if ui_joystick.consume_secondary():
       if self._current_outer_page_idx() == 1:
+        print("[menu joystick] secondary/back on games page", flush=True)
         self._scroll_outer_to(self._games_layout)
 
   def _handle_transitions(self):
