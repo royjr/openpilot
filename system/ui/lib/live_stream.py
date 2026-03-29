@@ -10,7 +10,7 @@ STREAM_ENABLED = os.getenv("UI_STREAM") == "1"
 STREAM_HOST = os.getenv("UI_STREAM_HOST", "0.0.0.0")
 STREAM_PORT = int(os.getenv("UI_STREAM_PORT", "8765"))
 STREAM_FPS = float(os.getenv("UI_STREAM_FPS", "3.0"))
-STREAM_SCALE = max(0.1, min(1.0, float(os.getenv("UI_STREAM_SCALE", "0.75"))))
+STREAM_SCALE = max(0.1, min(1.0, float(os.getenv("UI_STREAM_SCALE", "0.5"))))
 
 HTML = """<!doctype html>
 <html>
@@ -33,14 +33,11 @@ HTML = """<!doctype html>
       box-sizing: border-box;
     }
     img {
-      width: min(100vw, calc(100vh * 0.7));
-      max-width: 100vw;
-      max-height: 100vh;
-      object-fit: contain;
-      border-radius: 0;
+      max-width: 96vw;
+      max-height: 88vh;
+      border-radius: 12px;
       background: #000;
       box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
-      transform: scaleY(-1);
     }
   </style>
 </head>
