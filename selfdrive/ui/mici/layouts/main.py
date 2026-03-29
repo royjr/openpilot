@@ -1,5 +1,6 @@
 import pyray as rl
 import cereal.messaging as messaging
+from openpilot.system.ui.lib.scroll_panel2 import ScrollState
 from openpilot.selfdrive.ui.layouts.doom import DoomLayout
 from openpilot.selfdrive.ui.layouts.dino import DinoLayout
 from openpilot.selfdrive.ui.mici.layouts.dino_home import DinoHomeLayout
@@ -28,6 +29,8 @@ class MiciMainLayout(Scroller):
     self._prev_standstill = False
     self._onroad_time_delay: float | None = None
     self._setup = False
+    self._games_scroll_lock_until = 0.0
+    self._last_game_home: Widget | None = None
 
     # Initialize widgets
     self._home_layout = MiciHomeLayout()
@@ -51,6 +54,7 @@ class MiciMainLayout(Scroller):
       self._dino_home_layout,
     ])
     self._games_layout._scroller.set_reset_scroll_at_show(False)
+    self._install_games_scroll_clamp()
 
     self._scroller.add_widgets([
       self._alerts_layout,
@@ -61,6 +65,7 @@ class MiciMainLayout(Scroller):
 
     # Disable scrolling when onroad is interacting with bookmark
     self._scroller.set_scrolling_enabled(lambda: not self._onroad_layout.is_swiping_left())
+    self._games_layout._scroller.set_scrolling_enabled(lambda: rl.get_time() >= self._games_scroll_lock_until)
 
     # Set callbacks
     self._setup_callbacks()
@@ -76,9 +81,11 @@ class MiciMainLayout(Scroller):
   def _setup_callbacks(self):
     self._home_layout.set_callbacks(on_settings=lambda: gui_app.push_widget(self._settings_layout))
     self._doom_home_layout.set_callbacks(on_settings=lambda: gui_app.push_widget(self._settings_layout),
-                                         on_doom=lambda: gui_app.push_widget(self._doom_layout))
+                                         on_doom=lambda: self._launch_game(self._doom_layout, self._doom_home_layout))
     self._dino_home_layout.set_callbacks(on_settings=lambda: gui_app.push_widget(self._settings_layout),
-                                         on_dino=lambda: gui_app.push_widget(self._dino_layout))
+                                         on_dino=lambda: self._launch_game(self._dino_layout, self._dino_home_layout))
+    self._doom_layout.set_on_hide_callback(self._restore_last_game_home)
+    self._dino_layout.set_on_hide_callback(self._restore_last_game_home)
     self._onroad_layout.set_click_callback(lambda: self._scroll_to_games(self._home_layout))
     device.add_interactive_timeout_callback(self._on_interactive_timeout)
 
@@ -91,6 +98,17 @@ class MiciMainLayout(Scroller):
     layout_y = int(layout.rect.y)
     self._games_layout._scroller.scroll_to(layout_y, smooth=True)
 
+  def _launch_game(self, game_layout: Widget, home_layout: Widget):
+    self._last_game_home = home_layout
+    self._games_scroll_lock_until = float("inf")
+    gui_app.push_widget(game_layout)
+
+  def _restore_last_game_home(self):
+    if self._last_game_home is None:
+      return
+    self._games_scroll_lock_until = rl.get_time() + 0.35
+    self._scroll_to_games(self._last_game_home)
+
   def _render(self, _):
     if not self._setup:
       if self._alerts_layout.active_alerts() > 0:
@@ -102,6 +120,28 @@ class MiciMainLayout(Scroller):
 
     # Render
     super()._render(self._rect)
+    self._clamp_games_scroll()
+
+  def _install_games_scroll_clamp(self):
+    scroll_panel = self._games_layout._scroller.scroll_panel
+
+    def clamped_set_offset(value: float):
+      min_offset = min(0.0, self._games_layout.rect.height - self._games_layout._scroller.content_size)
+      clamped = max(min(value, 0.0), min_offset)
+      scroll_panel._offset.y = clamped
+
+    scroll_panel.set_offset = clamped_set_offset
+
+  def _clamp_games_scroll(self):
+    games_scroller = self._games_layout._scroller
+    scroll_panel = games_scroller.scroll_panel
+    min_offset = min(0.0, self._games_layout.rect.height - games_scroller.content_size)
+    clamped = max(min(scroll_panel.get_offset(), 0.0), min_offset)
+    if abs(clamped - scroll_panel.get_offset()) > 1e-3:
+      scroll_panel.set_offset(clamped)
+      scroll_panel._velocity = 0.0
+      if scroll_panel.state == ScrollState.AUTO_SCROLL:
+        scroll_panel._state = ScrollState.STEADY
 
   def _handle_transitions(self):
     # Don't pop if onboarding

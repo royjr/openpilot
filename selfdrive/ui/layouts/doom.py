@@ -2,6 +2,7 @@ import math
 import os
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import pyray as rl
@@ -164,6 +165,7 @@ class DoomJoystick:
 class DoomLayout(NavWidget):
   def __init__(self):
     super().__init__()
+    self._on_hide: Callable[[], None] | None = None
     self._font = gui_app.font(FontWeight.BOLD)
     self._hud_font = gui_app.font(FontWeight.MEDIUM)
 
@@ -203,7 +205,12 @@ class DoomLayout(NavWidget):
     self._stop_music()
     self._reset(restart_music=False)
     self._joystick.stop()
+    if self._on_hide is not None:
+      self._on_hide()
     super().hide_event()
+
+  def set_on_hide_callback(self, callback: Callable[[], None] | None):
+    self._on_hide = callback
 
   def _reset(self, restart_music: bool = True):
     self._player_x = 1.5

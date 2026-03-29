@@ -1,5 +1,6 @@
 import os
 import random
+from collections.abc import Callable
 
 import pyray as rl
 
@@ -18,6 +19,7 @@ HOTZ_PATH = os.path.join(LAYOUT_DIR, "hotz.png")
 class DinoLayout(NavWidget):
   def __init__(self):
     super().__init__()
+    self._on_hide: Callable[[], None] | None = None
     self._font = gui_app.font(FontWeight.BOLD)
     self._hud_font = gui_app.font(FontWeight.MEDIUM)
     self._game_rect = rl.Rectangle(0, 0, 0, 0)
@@ -29,7 +31,12 @@ class DinoLayout(NavWidget):
 
   def hide_event(self):
     self._reset()
+    if self._on_hide is not None:
+      self._on_hide()
     super().hide_event()
+
+  def set_on_hide_callback(self, callback: Callable[[], None] | None):
+    self._on_hide = callback
 
   def _reset(self):
     self._dead = False
