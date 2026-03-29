@@ -62,6 +62,7 @@ class DoomJoystick:
     self._running = False
     self._thread = None
     self.connected = False
+    self._last_debug_values: dict[str, int] = {}
     self.move = 0.0
     self.turn = 0.0
     self.fire_pressed = False
@@ -120,6 +121,8 @@ class DoomJoystick:
         self._handle_event(joystick_event.code, joystick_event.state)
 
   def _handle_event(self, code: str, state: int):
+    self._debug_event(code, state)
+
     if code in self._flip_map:
       code = self._flip_map[code]
       state = -state
@@ -143,6 +146,13 @@ class DoomJoystick:
         self._axes_values[code] = expo * norm ** 3 + (1 - expo) * norm
         self.move = self._axes_values[self._move_axis]
         self.turn = self._axes_values[self._turn_axis]
+
+  def _debug_event(self, code: str, state: int):
+    prev = self._last_debug_values.get(code)
+    if prev == state:
+      return
+    self._last_debug_values[code] = state
+    print(f"[doom joystick] {code}={state}", flush=True)
 
 
 class DoomLayout(NavWidget):
