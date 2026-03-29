@@ -27,7 +27,7 @@ VIRTUAL_PAD_DEADZONE = 18.0
 VIRTUAL_PAD_MAX_RADIUS = 120.0
 LAYOUT_DIR = os.path.dirname(__file__)
 DOOM_MUSIC_PATH = os.path.join(LAYOUT_DIR, "doom.mp3")
-DOOM_DIE_PATH = os.path.join(LAYOUT_DIR, "doom_die.wav")
+DOOM_DIE_PATH = os.path.join(LAYOUT_DIR, "doom_die.mp3")
 
 MAP = [
   "############",
