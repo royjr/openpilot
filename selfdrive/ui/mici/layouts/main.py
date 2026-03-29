@@ -132,7 +132,7 @@ class MiciMainLayout(Scroller):
     if gui_app.widget_in_stack(self._onboarding_window):
       return
 
-    if active_widget in (self, self._games_layout, self._home_layout, self._alerts_layout, self._onroad_layout):
+    if not self._game_active() and active_widget != self._settings_layout:
       self._handle_menu_joystick()
       return
 
@@ -142,14 +142,15 @@ class MiciMainLayout(Scroller):
   def _handle_menu_joystick(self):
     now = rl.get_time()
     menu_x, menu_y = ui_joystick.get_menu_axes()
-    debug_line = f"[menu joystick] page={self._current_outer_page_idx()} x={menu_x:+.2f} y={menu_y:+.2f} next_x={self._joystick_next_x:.2f} next_y={self._joystick_next_y:.2f}"
+    current_page = self._current_outer_page_idx()
+    debug_line = f"[menu joystick] page={current_page} x={menu_x:+.2f} y={menu_y:+.2f} next_x={self._joystick_next_x:.2f} next_y={self._joystick_next_y:.2f}"
     if (abs(menu_x) >= 0.2 or abs(menu_y) >= 0.2) and debug_line != self._last_menu_debug:
       self._last_menu_debug = debug_line
       print(debug_line, flush=True)
 
     if abs(menu_x) >= 0.55 and now >= self._joystick_next_x:
       direction = 1 if menu_x > 0 else -1
-      idx = self._current_outer_page_idx()
+      idx = current_page
       next_idx = max(0, min(len(self._outer_pages()) - 1, idx + direction))
       if next_idx != idx:
         print(f"[menu joystick] horizontal move {idx}->{next_idx}", flush=True)
@@ -158,22 +159,22 @@ class MiciMainLayout(Scroller):
     elif abs(menu_x) < 0.3:
       self._joystick_next_x = 0.0
 
-    if self._current_outer_page_idx() == 1:
-      if ui_joystick.consume_menu_down():
-        print("[menu joystick] button cycle next", flush=True)
-        self._home_layout.cycle_selected_game(1)
-      if ui_joystick.consume_menu_up():
-        print("[menu joystick] button cycle prev", flush=True)
-        self._home_layout.cycle_selected_game(-1)
+    if ui_joystick.consume_menu_down():
+      print(f"[menu joystick] button cycle next from page={current_page}", flush=True)
+      self._scroll_outer_to(self._games_layout)
+      self._home_layout.cycle_selected_game(1)
+    if ui_joystick.consume_menu_up():
+      print(f"[menu joystick] button cycle prev from page={current_page}", flush=True)
+      self._scroll_outer_to(self._games_layout)
+      self._home_layout.cycle_selected_game(-1)
 
-    if ui_joystick.consume_primary() and self._current_outer_page_idx() == 1:
+    if ui_joystick.consume_primary() and current_page == 1:
       print("[menu joystick] launch selected game", flush=True)
       self._home_layout.launch_selected_game()
 
     if ui_joystick.consume_secondary():
-      if self._current_outer_page_idx() == 1:
-        print("[menu joystick] secondary/back on games page", flush=True)
-        self._scroll_outer_to(self._games_layout)
+      print(f"[menu joystick] secondary/back on page={current_page}", flush=True)
+      self._scroll_outer_to(self._games_layout)
 
   def _handle_transitions(self):
     # Don't pop if onboarding
