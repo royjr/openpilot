@@ -158,12 +158,13 @@ class MiciMainLayout(Scroller):
     elif abs(menu_x) < 0.3:
       self._joystick_next_x = 0.0
 
-    if abs(menu_y) >= 0.55 and now >= self._joystick_next_y and self._current_outer_page_idx() == 1:
-      print(f"[menu joystick] vertical cycle {'next' if menu_y < 0 else 'prev'}", flush=True)
-      self._home_layout.cycle_selected_game(1 if menu_y < 0 else -1)
-      self._joystick_next_y = now + 0.18
-    elif abs(menu_y) < 0.3:
-      self._joystick_next_y = 0.0
+    if self._current_outer_page_idx() == 1:
+      if ui_joystick.consume_menu_down():
+        print("[menu joystick] button cycle next", flush=True)
+        self._home_layout.cycle_selected_game(1)
+      if ui_joystick.consume_menu_up():
+        print("[menu joystick] button cycle prev", flush=True)
+        self._home_layout.cycle_selected_game(-1)
 
     if ui_joystick.consume_primary() and self._current_outer_page_idx() == 1:
       print("[menu joystick] launch selected game", flush=True)
