@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 import pyray as rl
 
-from openpilot.system.ui.lib.application import FontWeight, MousePos, gui_app
+from openpilot.system.ui.lib.application import FontWeight, MouseEvent, MousePos, gui_app
 from openpilot.system.ui.lib.text_measure import measure_text_cached
 from openpilot.system.ui.widgets.nav_widget import NavWidget
 from openpilot.system.hardware import PC
@@ -15,6 +15,8 @@ PLAYER_RADIUS = 0.18
 MOVE_SPEED = 2.7
 TURN_SPEED = 2.2
 ENEMY_KILL_DIST = 0.55
+VIRTUAL_PAD_DEADZONE = 18.0
+VIRTUAL_PAD_MAX_RADIUS = 120.0
 LAYOUT_DIR = os.path.dirname(__file__)
 DOOM_MUSIC_PATH = os.path.join(LAYOUT_DIR, "doom.mp3")
 DOOM_DIE_PATH = os.path.join(LAYOUT_DIR, "doom_die.wav")
@@ -65,6 +67,9 @@ class DoomLayout(NavWidget):
     self._message_time = 0.0
     self._ui_scale = 1.0
     self._performance_mode = not PC
+    self._touch_origin: list[MousePos | None] = [None, None]
+    self._touch_current: list[MousePos | None] = [None, None]
+    self._touch_dragged: list[bool] = [False, False]
 
     self._reset()
 
@@ -116,15 +121,43 @@ class DoomLayout(NavWidget):
     self._draw_crosshair()
     self._draw_minimap()
     self._draw_hud()
+    self._draw_virtual_pad()
     self._draw_overlays()
+
+  def _handle_mouse_event(self, mouse_event: MouseEvent) -> None:
+    super()._handle_mouse_event(mouse_event)
+
+    if mouse_event.slot >= len(self._touch_origin):
+      return
+
+    if mouse_event.left_pressed and rl.check_collision_point_rec(mouse_event.pos, self._view_rect):
+      self._touch_origin[mouse_event.slot] = mouse_event.pos
+      self._touch_current[mouse_event.slot] = mouse_event.pos
+      self._touch_dragged[mouse_event.slot] = False
+    elif mouse_event.left_down and self._touch_origin[mouse_event.slot] is not None:
+      self._touch_current[mouse_event.slot] = mouse_event.pos
+      drag = math.hypot(mouse_event.pos.x - self._touch_origin[mouse_event.slot].x,
+                        mouse_event.pos.y - self._touch_origin[mouse_event.slot].y)
+      if drag > VIRTUAL_PAD_DEADZONE * self._ui_scale:
+        self._touch_dragged[mouse_event.slot] = True
+    elif mouse_event.left_released:
+      self._touch_current[mouse_event.slot] = mouse_event.pos
 
   def _handle_mouse_release(self, mouse_pos: MousePos):
     super()._handle_mouse_release(mouse_pos)
+    release_slot = next((i for i, origin in enumerate(self._touch_origin) if origin is not None), None)
+    was_drag = False if release_slot is None else self._touch_dragged[release_slot]
+
     if rl.check_collision_point_rec(mouse_pos, self._view_rect):
       if self._win or self._dead:
         self._reset()
-      else:
+      elif not was_drag:
         self._fire()
+
+    if release_slot is not None:
+      self._touch_origin[release_slot] = None
+      self._touch_current[release_slot] = None
+      self._touch_dragged[release_slot] = False
 
   def _update_sim(self, dt: float):
     self._elapsed += dt
@@ -154,6 +187,10 @@ class DoomLayout(NavWidget):
       self._reset()
     if rl.is_key_pressed(rl.KeyboardKey.KEY_ESCAPE):
       gui_app.pop_widget()
+
+    touch_move, touch_turn = self._get_virtual_pad_input()
+    move_dir += touch_move
+    turn_dir += touch_turn
 
     self._player_angle = (self._player_angle + turn_dir * TURN_SPEED * dt) % math.tau
     if not self._win and not self._dead:
@@ -336,6 +373,50 @@ class DoomLayout(NavWidget):
     time_text = f"TIME {self._elapsed:05.1f}"
     time_size = measure_text_cached(self._font, time_text, title_font)
     rl.draw_text_ex(self._font, time_text, rl.Vector2(self._hud_rect.x + self._hud_rect.width - time_size.x - 30 * self._ui_scale, self._hud_rect.y + 22 * self._ui_scale), title_font, 0, rl.Color(255, 220, 210, 255))
+
+  def _get_virtual_pad_input(self) -> tuple[float, float]:
+    for slot in range(len(self._touch_origin)):
+      origin = self._touch_origin[slot]
+      current = self._touch_current[slot]
+      if origin is None or current is None:
+        continue
+
+      dx = current.x - origin.x
+      dy = current.y - origin.y
+      radius = VIRTUAL_PAD_MAX_RADIUS * self._ui_scale
+      dist = math.hypot(dx, dy)
+      if dist < VIRTUAL_PAD_DEADZONE * self._ui_scale:
+        return 0.0, 0.0
+
+      scale = min(1.0, dist / radius)
+      turn = max(-1.0, min(1.0, dx / radius)) * scale
+      move = max(-1.0, min(1.0, -dy / radius)) * scale
+      return move, turn
+
+    return 0.0, 0.0
+
+  def _draw_virtual_pad(self):
+    for slot in range(len(self._touch_origin)):
+      origin = self._touch_origin[slot]
+      current = self._touch_current[slot]
+      if origin is None or current is None:
+        continue
+
+      radius = VIRTUAL_PAD_MAX_RADIUS * self._ui_scale
+      knob_radius = 34 * self._ui_scale
+      dx = current.x - origin.x
+      dy = current.y - origin.y
+      dist = math.hypot(dx, dy)
+      if dist > radius and dist > 0:
+        dx *= radius / dist
+        dy *= radius / dist
+
+      base_color = rl.Color(255, 255, 255, 45)
+      edge_color = rl.Color(255, 255, 255, 90)
+      knob_color = rl.Color(255, 80, 80, 180)
+      rl.draw_circle(int(origin.x), int(origin.y), radius, base_color)
+      rl.draw_circle_lines(int(origin.x), int(origin.y), radius, edge_color)
+      rl.draw_circle(int(origin.x + dx), int(origin.y + dy), knob_radius, knob_color)
 
   def _draw_overlays(self):
     if self._flash > 0.0:
