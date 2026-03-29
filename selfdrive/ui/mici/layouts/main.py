@@ -168,8 +168,9 @@ class MiciMainLayout(Scroller):
       self._scroll_outer_to(self._games_layout)
       self._home_layout.cycle_selected_game(-1)
 
-    if (ui_joystick.consume_primary() or ui_joystick.consume_alt_fire()) and current_page == 1:
+    if ui_joystick.consume_primary() or ui_joystick.consume_alt_fire():
       print("[menu joystick] launch selected game", flush=True)
+      self._scroll_outer_to(self._games_layout)
       self._home_layout.launch_selected_game()
 
     if ui_joystick.consume_secondary():
