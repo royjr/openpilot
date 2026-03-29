@@ -197,28 +197,39 @@ def start_replay(route: str, prefix: str, playback: str, data_dir: str | None, s
 
 
 def stop_replay(proc: subprocess.Popen | None) -> None:
-  if proc is None or proc.poll() is not None:
-    return
-
-  if os.name != "nt":
-    try:
-      os.killpg(proc.pid, signal.SIGTERM)
-    except ProcessLookupError:
-      return
-  else:
-    proc.terminate()
-
-  try:
-    proc.wait(timeout=5)
-  except subprocess.TimeoutExpired:
+  if proc is not None and proc.poll() is None:
     if os.name != "nt":
       try:
-        os.killpg(proc.pid, signal.SIGKILL)
+        os.killpg(proc.pid, signal.SIGTERM)
       except ProcessLookupError:
-        return
+        pass
     else:
-      proc.kill()
-    proc.wait(timeout=5)
+      proc.terminate()
+
+    try:
+      proc.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+      if os.name != "nt":
+        try:
+          os.killpg(proc.pid, signal.SIGKILL)
+        except ProcessLookupError:
+          pass
+      else:
+        proc.kill()
+      proc.wait(timeout=5)
+
+  # `replay` can leave helper processes like `replayd` behind, so do one
+  # targeted cleanup pass on shutdown as well.
+  for pattern in ("/tools/replay/replay", "replayd"):
+    try:
+      subprocess.run(
+        ["pkill", "-f", pattern],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=False,
+      )
+    except FileNotFoundError:
+      pass
 
 
 def wait_for_can_socket(prefix: str, timeout: float) -> None:
