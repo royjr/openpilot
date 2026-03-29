@@ -114,8 +114,8 @@ class MiciHomeLayout(Widget):
     self._date_label = UnifiedLabel("", font_size=36, text_color=rl.GRAY, font_weight=FontWeight.ROMAN, max_width=480, wrap_text=False)
     self._branch_label = UnifiedLabel("", font_size=36, text_color=rl.GRAY, font_weight=FontWeight.ROMAN, scroll=True)
     self._version_commit_label = UnifiedLabel("", font_size=36, text_color=rl.GRAY, font_weight=FontWeight.ROMAN, max_width=480, wrap_text=False)
-    self._doom_button = Button("DOOM", click_callback=lambda: self._on_doom_click() if self._on_doom_click else None,
-                               button_style=ButtonStyle.DANGER, font_size=32, font_weight=FontWeight.DISPLAY,)
+    self._doom_label.set_click_callback(lambda: self._on_doom_click() if self._on_doom_click else None)
+    self._pilot_label.set_click_callback(lambda: self._on_doom_click() if self._on_doom_click else None)
 
   def show_event(self):
     super().show_event()
@@ -215,12 +215,3 @@ class MiciHomeLayout(Widget):
 
     footer_rect = rl.Rectangle(self.rect.x + HOME_PADDING, self.rect.y + self.rect.height - footer_h, self.rect.width - HOME_PADDING, footer_h)
     self._status_bar_layout.render(footer_rect)
-    visible_widgets = [widget for widget in self._status_bar_layout.widgets if widget.is_visible]
-    icon_group_w = sum(widget.rect.width for widget in visible_widgets)
-    if visible_widgets:
-      icon_group_w += 18 * (len(visible_widgets) - 1)
-    doom_w = 142
-    doom_h = 45
-    doom_x = footer_rect.x + icon_group_w + 16
-    doom_y = footer_rect.y + (footer_h - doom_h) / 2
-    self._doom_button.render(rl.Rectangle(doom_x, doom_y, doom_w, doom_h))
