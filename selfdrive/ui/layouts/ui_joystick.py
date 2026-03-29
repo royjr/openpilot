@@ -142,7 +142,7 @@ class UIJoystickManager:
         if high == low:
           norm = 0.0
         else:
-          norm = -float((2.0 * (state - low) / (high - low)) - 1.0)
+          norm = float((2.0 * (state - low) / (high - low)) - 1.0)
         norm = norm if abs(norm) > 0.05 else 0.0
         expo = 0.4
         self._axes_values[code] = expo * norm ** 3 + (1 - expo) * norm

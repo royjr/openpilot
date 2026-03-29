@@ -223,7 +223,7 @@ class DoomLayout(NavWidget):
 
     joy_x, joy_y = ui_joystick.get_stick_axes()
     move_dir -= joy_y
-    strafe_dir -= joy_x
+    strafe_dir += joy_x
 
     joy_fire = ui_joystick.consume_alt_fire()
     joy_restart = ui_joystick.consume_restart()
