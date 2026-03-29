@@ -18,6 +18,7 @@ PLAYER_RADIUS = 0.18
 MOVE_SPEED = 2.7
 TURN_SPEED = 2.2
 ENEMY_KILL_DIST = 0.55
+ENEMY_MOVE_SPEED = 1.0
 VIRTUAL_PAD_DEADZONE = 18.0
 VIRTUAL_PAD_MAX_RADIUS = 120.0
 LAYOUT_DIR = os.path.dirname(__file__)
@@ -46,6 +47,8 @@ class Enemy:
   x: float
   y: float
   alive: bool = True
+  angle: float = 0.0
+  retarget_time: float = 0.0
 
 class DoomLayout(NavWidget):
   BACK_TOUCH_AREA_PERCENTAGE = 0.1
@@ -109,9 +112,9 @@ class DoomLayout(NavWidget):
     self._message = "ESCAPE THE MAZE"
     self._message_time = 2.5
     self._enemies = [
-      Enemy(5.5, 3.5),
-      Enemy(9.2, 6.5),
-      Enemy(8.5, 9.0),
+      Enemy(5.5, 3.5, angle=0.4, retarget_time=0.8),
+      Enemy(9.2, 6.5, angle=2.2, retarget_time=1.1),
+      Enemy(8.5, 9.0, angle=4.0, retarget_time=1.5),
     ]
     if restart_music:
       self._start_music()
@@ -249,6 +252,7 @@ class DoomLayout(NavWidget):
       self._play_success()
 
     if not self._win and not self._dead:
+      self._move_enemies(dt)
       self._check_enemy_collision()
 
   def _try_move(self, move_dir: float, strafe_dir: float, dt: float):
@@ -271,6 +275,45 @@ class DoomLayout(NavWidget):
       (x, y + PLAYER_RADIUS),
     ]
     return any(self._tile_at(px, py) == "#" for px, py in checks)
+
+  def _move_enemies(self, dt: float):
+    for idx, enemy in enumerate(self._enemies):
+      if not enemy.alive:
+        continue
+
+      enemy.retarget_time -= dt
+      if enemy.retarget_time <= 0.0:
+        enemy.angle = math.radians(float(rl.get_random_value(0, 359)))
+        enemy.retarget_time = 0.7 + (rl.get_random_value(0, 100) / 100.0) * 1.4
+
+      step = ENEMY_MOVE_SPEED * dt
+      dx = math.cos(enemy.angle) * step
+      dy = math.sin(enemy.angle) * step
+      next_x = enemy.x + dx
+      next_y = enemy.y + dy
+
+      moved = False
+      if not self._enemy_blocked(next_x, enemy.y, idx):
+        enemy.x = next_x
+        moved = True
+      if not self._enemy_blocked(enemy.x, next_y, idx):
+        enemy.y = next_y
+        moved = True
+
+      if not moved:
+        enemy.angle = math.radians(float(rl.get_random_value(0, 359)))
+        enemy.retarget_time = 0.15
+
+  def _enemy_blocked(self, x: float, y: float, enemy_idx: int) -> bool:
+    if self._blocked(x, y):
+      return True
+
+    for idx, other in enumerate(self._enemies):
+      if idx == enemy_idx or not other.alive:
+        continue
+      if math.hypot(other.x - x, other.y - y) < 0.42:
+        return True
+    return False
 
   def _tile_at(self, x: float, y: float) -> str:
     ix = int(x)
