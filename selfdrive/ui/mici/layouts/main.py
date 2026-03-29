@@ -3,9 +3,11 @@ import cereal.messaging as messaging
 from openpilot.system.ui.lib.scroll_panel2 import ScrollState
 from openpilot.selfdrive.ui.layouts.doom import DoomLayout
 from openpilot.selfdrive.ui.layouts.dino import DinoLayout
+from openpilot.selfdrive.ui.layouts.snake import SnakeLayout
 from openpilot.selfdrive.ui.mici.layouts.dino_home import DinoHomeLayout
 from openpilot.selfdrive.ui.mici.layouts.doom_home import DoomHomeLayout
 from openpilot.selfdrive.ui.mici.layouts.home import MiciHomeLayout
+from openpilot.selfdrive.ui.mici.layouts.snake_home import SnakeHomeLayout
 from openpilot.selfdrive.ui.mici.layouts.settings.settings import SettingsLayout
 from openpilot.selfdrive.ui.mici.layouts.offroad_alerts import MiciOffroadAlerts
 from openpilot.selfdrive.ui.mici.onroad.augmented_road_view import AugmentedRoadView
@@ -36,19 +38,21 @@ class MiciMainLayout(Scroller):
     self._home_layout = MiciHomeLayout()
     self._doom_home_layout = DoomHomeLayout()
     self._dino_home_layout = DinoHomeLayout()
+    self._snake_home_layout = SnakeHomeLayout()
     self._games_layout = Scroller(horizontal=False, snap_items=True, spacing=0, pad=0, scroll_indicator=False, edge_shadows=False)
     self._doom_layout = DoomLayout()
     self._dino_layout = DinoLayout()
+    self._snake_layout = SnakeLayout()
     self._alerts_layout = MiciOffroadAlerts()
     self._settings_layout = SettingsLayout()
     self._onroad_layout = AugmentedRoadView(bookmark_callback=self._on_bookmark_clicked)
 
-    for widget in (self._home_layout, self._doom_home_layout, self._dino_home_layout,
+    for widget in (self._home_layout, self._doom_home_layout, self._dino_home_layout, self._snake_home_layout,
                    self._games_layout, self._alerts_layout, self._onroad_layout):
       widget.set_enabled(lambda self=self: self.enabled)
 
     # Initialize widget rects
-    for widget in (self._home_layout, self._doom_home_layout, self._dino_home_layout, self._games_layout, self._settings_layout, self._alerts_layout, self._onroad_layout):
+    for widget in (self._home_layout, self._doom_home_layout, self._dino_home_layout, self._snake_home_layout, self._games_layout, self._settings_layout, self._alerts_layout, self._onroad_layout):
       # TODO: set parent rect and use it if never passed rect from render (like in Scroller)
       widget.set_rect(rl.Rectangle(0, 0, gui_app.width, gui_app.height))
 
@@ -56,6 +60,7 @@ class MiciMainLayout(Scroller):
       self._home_layout,
       self._doom_home_layout,
       self._dino_home_layout,
+      self._snake_home_layout,
     ])
     self._games_layout._scroller.set_reset_scroll_at_show(False)
     self._install_games_scroll_clamp()
@@ -88,8 +93,11 @@ class MiciMainLayout(Scroller):
                                          on_doom=lambda: self._launch_game(self._doom_layout, self._doom_home_layout))
     self._dino_home_layout.set_callbacks(on_settings=lambda: gui_app.push_widget(self._settings_layout),
                                          on_dino=lambda: self._launch_game(self._dino_layout, self._dino_home_layout))
+    self._snake_home_layout.set_callbacks(on_settings=lambda: gui_app.push_widget(self._settings_layout),
+                                          on_snake=lambda: self._launch_game(self._snake_layout, self._snake_home_layout))
     self._doom_layout.set_on_hide_callback(self._restore_last_game_home)
     self._dino_layout.set_on_hide_callback(self._restore_last_game_home)
+    self._snake_layout.set_on_hide_callback(self._restore_last_game_home)
     self._onroad_layout.set_click_callback(lambda: self._scroll_to_games(self._home_layout))
     device.add_interactive_timeout_callback(self._on_interactive_timeout)
 
@@ -174,7 +182,7 @@ class MiciMainLayout(Scroller):
     self._prev_standstill = CS.standstill
 
   def _game_active(self) -> bool:
-    return gui_app.get_active_widget() in (self._doom_layout, self._dino_layout)
+    return gui_app.get_active_widget() in (self._doom_layout, self._dino_layout, self._snake_layout)
 
   def _on_interactive_timeout(self):
     # Don't pop if onboarding
