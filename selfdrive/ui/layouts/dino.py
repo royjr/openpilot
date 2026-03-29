@@ -136,14 +136,14 @@ class DinoLayout(NavWidget):
   def _update_sim(self, dt: float):
     if rl.is_key_pressed(rl.KeyboardKey.KEY_ESCAPE):
       gui_app.pop_widget()
-    if ui_joystick.consume_primary():
+    if ui_joystick.consume_secondary():
       gui_app.pop_widget()
     if rl.is_key_pressed(rl.KeyboardKey.KEY_SPACE) or rl.is_key_pressed(rl.KeyboardKey.KEY_UP):
       if self._dead:
         self._reset()
       else:
         self._jump()
-    if ui_joystick.consume_secondary():
+    if ui_joystick.consume_alt_fire():
       if self._dead:
         self._reset()
       else:

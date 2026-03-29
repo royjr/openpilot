@@ -221,11 +221,11 @@ class DoomLayout(NavWidget):
     move_dir += touch_move
     turn_dir += touch_turn
 
-    joy_move, joy_turn = ui_joystick.get_game_axes()
-    move_dir += joy_move
-    turn_dir += joy_turn
+    joy_x, joy_y = ui_joystick.get_stick_axes()
+    move_dir += joy_y
+    strafe_dir += joy_x
 
-    joy_fire = ui_joystick.consume_primary() or ui_joystick.consume_alt_fire()
+    joy_fire = ui_joystick.consume_alt_fire()
     joy_restart = ui_joystick.consume_restart()
     if ui_joystick.consume_secondary():
       gui_app.pop_widget()

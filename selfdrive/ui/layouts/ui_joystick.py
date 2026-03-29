@@ -60,17 +60,25 @@ class UIJoystickManager:
     with self._lock:
       return self.menu_x, self.menu_y
 
+  def get_hat_axes(self) -> tuple[float, float]:
+    with self._lock:
+      return self._hat_x, self._hat_y
+
+  def get_stick_axes(self) -> tuple[float, float]:
+    with self._lock:
+      return self._axes_values[self._menu_x_axis], self._axes_values[self._menu_y_axis]
+
   def consume_primary(self) -> bool:
-    return self._consume_any(("BTN_SOUTH", "BTN_C"))
+    return self._consume_any(("BTN_C"))
 
   def consume_secondary(self) -> bool:
-    return self._consume_any(("BTN_EAST", "BTN_B", "BTN_SELECT"))
+    return self._consume_any(("BTN_TR2",))
 
   def consume_alt_fire(self) -> bool:
-    return self._consume_any(("BTN_WEST",))
+    return self._consume_any(("BTN_EAST",))
 
   def consume_restart(self) -> bool:
-    return self._consume_any(("BTN_TL2", "BTN_TR2"))
+    return self._consume_any(("BTN_TL2",))
 
   def _consume_any(self, names: tuple[str, ...]) -> bool:
     with self._lock:

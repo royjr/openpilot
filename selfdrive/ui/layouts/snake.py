@@ -207,7 +207,7 @@ class SnakeLayout(NavWidget):
     if touch_direction is not None:
       self._set_direction(touch_direction)
 
-    joy_x, joy_y = ui_joystick.get_menu_axes()
+    joy_x, joy_y = ui_joystick.get_hat_axes()
     if abs(joy_x) > 0.55 or abs(joy_y) > 0.55:
       if abs(joy_x) > abs(joy_y):
         self._set_direction((1, 0) if joy_x > 0 else (-1, 0))
