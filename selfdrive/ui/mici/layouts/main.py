@@ -31,6 +31,7 @@ class MiciMainLayout(Scroller):
     # Initialize widgets
     self._home_layout = MiciHomeLayout()
     self._dino_home_layout = DinoHomeLayout()
+    self._games_layout = Scroller(horizontal=False, snap_items=True, spacing=0, pad=0, scroll_indicator=False, edge_shadows=False)
     self._doom_layout = DoomLayout()
     self._dino_layout = DinoLayout()
     self._alerts_layout = MiciOffroadAlerts()
@@ -38,14 +39,19 @@ class MiciMainLayout(Scroller):
     self._onroad_layout = AugmentedRoadView(bookmark_callback=self._on_bookmark_clicked)
 
     # Initialize widget rects
-    for widget in (self._home_layout, self._dino_home_layout, self._settings_layout, self._alerts_layout, self._onroad_layout):
+    for widget in (self._home_layout, self._dino_home_layout, self._games_layout, self._settings_layout, self._alerts_layout, self._onroad_layout):
       # TODO: set parent rect and use it if never passed rect from render (like in Scroller)
       widget.set_rect(rl.Rectangle(0, 0, gui_app.width, gui_app.height))
 
-    self._scroller.add_widgets([
-      self._alerts_layout,
+    self._games_layout._scroller.add_widgets([
       self._home_layout,
       self._dino_home_layout,
+    ])
+    self._games_layout._scroller.set_reset_scroll_at_show(False)
+
+    self._scroller.add_widgets([
+      self._alerts_layout,
+      self._games_layout,
       self._onroad_layout,
     ])
     self._scroller.set_reset_scroll_at_show(False)
@@ -69,12 +75,17 @@ class MiciMainLayout(Scroller):
                                     on_doom=lambda: gui_app.push_widget(self._doom_layout))
     self._dino_home_layout.set_callbacks(on_settings=lambda: gui_app.push_widget(self._settings_layout),
                                          on_dino=lambda: gui_app.push_widget(self._dino_layout))
-    self._onroad_layout.set_click_callback(lambda: self._scroll_to(self._home_layout))
+    self._onroad_layout.set_click_callback(lambda: self._scroll_to_games(self._home_layout))
     device.add_interactive_timeout_callback(self._on_interactive_timeout)
 
-  def _scroll_to(self, layout: Widget):
+  def _scroll_outer_to(self, layout: Widget):
     layout_x = int(layout.rect.x)
     self._scroller.scroll_to(layout_x, smooth=True)
+
+  def _scroll_to_games(self, layout: Widget):
+    self._scroll_outer_to(self._games_layout)
+    layout_y = int(layout.rect.y)
+    self._games_layout._scroller.scroll_to(layout_y, smooth=True)
 
   def _render(self, _):
     if not self._setup:
@@ -82,6 +93,7 @@ class MiciMainLayout(Scroller):
         self._scroller.scroll_to(self._alerts_layout.rect.x)
       else:
         self._scroller.scroll_to(self._rect.width)
+        self._games_layout._scroller.scroll_to(self._home_layout.rect.y)
       self._setup = True
 
     # Render
@@ -100,17 +112,17 @@ class MiciMainLayout(Scroller):
       if ui_state.started:
         self._onroad_time_delay = rl.get_time()
       else:
-        self._scroll_to(self._home_layout)
+        self._scroll_to_games(self._home_layout)
 
     # FIXME: these two pops can interrupt user interacting in the settings
     if self._onroad_time_delay is not None and rl.get_time() - self._onroad_time_delay >= ONROAD_DELAY:
-      gui_app.pop_widgets_to(self, lambda: self._scroll_to(self._onroad_layout))
+      gui_app.pop_widgets_to(self, lambda: self._scroll_outer_to(self._onroad_layout))
       self._onroad_time_delay = None
 
     # When car leaves standstill, pop nav stack and scroll to onroad
     CS = ui_state.sm["carState"]
     if not CS.standstill and self._prev_standstill:
-      gui_app.pop_widgets_to(self, lambda: self._scroll_to(self._onroad_layout))
+      gui_app.pop_widgets_to(self, lambda: self._scroll_outer_to(self._onroad_layout))
     self._prev_standstill = CS.standstill
 
   def _on_interactive_timeout(self):
@@ -121,11 +133,11 @@ class MiciMainLayout(Scroller):
     if ui_state.started:
       # Don't pop if at standstill
       if not ui_state.sm["carState"].standstill:
-        gui_app.pop_widgets_to(self, lambda: self._scroll_to(self._onroad_layout))
+        gui_app.pop_widgets_to(self, lambda: self._scroll_outer_to(self._onroad_layout))
     else:
       # Screen turns off on timeout offroad, so pop immediately without animation
       gui_app.pop_widgets_to(self, instant=True)
-      self._scroll_to(self._home_layout)
+      self._scroll_to_games(self._home_layout)
 
   def _on_bookmark_clicked(self):
     user_bookmark = messaging.new_message('bookmarkButton')

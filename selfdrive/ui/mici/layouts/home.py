@@ -92,6 +92,7 @@ class MiciHomeLayout(Widget):
     self._mouse_down_t: None | float = None
     self._did_long_press = False
     self._is_pressed_prev = False
+    self._press_pos: MousePos | None = None
     self._title_press_pos: MousePos | None = None
     self._title_touch_active = False
 
@@ -161,6 +162,7 @@ class MiciHomeLayout(Widget):
     return rl.Rectangle(left, top, right - left, bottom - top)
 
   def _handle_mouse_press(self, mouse_pos: MousePos):
+    self._press_pos = mouse_pos
     self._title_touch_active = rl.check_collision_point_rec(mouse_pos, self._title_rect())
     self._title_press_pos = mouse_pos if self._title_touch_active else None
 
@@ -171,20 +173,24 @@ class MiciHomeLayout(Widget):
         self._title_touch_active = False
 
   def _handle_mouse_release(self, mouse_pos: MousePos):
+    press_drag = 0.0 if self._press_pos is None else math.hypot(mouse_pos.x - self._press_pos.x, mouse_pos.y - self._press_pos.y)
+
     if self._title_press_pos is not None:
       drag = math.hypot(mouse_pos.x - self._title_press_pos.x, mouse_pos.y - self._title_press_pos.y)
       tapped_title = self._title_touch_active and drag <= 20 and rl.check_collision_point_rec(mouse_pos, self._title_rect())
       self._title_press_pos = None
       self._title_touch_active = False
+      self._press_pos = None
       if tapped_title:
         if self._on_doom_click:
           self._on_doom_click()
         self._did_long_press = False
         return
 
-    if not self._did_long_press:
+    if not self._did_long_press and press_drag <= 20:
       if self._on_settings_click:
         self._on_settings_click()
+    self._press_pos = None
     self._did_long_press = False
 
   def _get_version_text(self) -> tuple[str, str, str, str] | None:
