@@ -292,7 +292,7 @@ def ui_thread(addr, route_entries=None, playback="1.0", data_dir=None, prefix="u
   if hor_mode:
     size = (CAMERA_DRAW_WIDTH + TOP_DOWN_DRAW_WIDTH + PLOT_DRAW_WIDTH, 960)
     write_x = 5
-    write_y = 680
+    write_y = 480
   else:
     size = (CAMERA_DRAW_WIDTH + TOP_DOWN_DRAW_WIDTH, 960 + 300)
     write_x = CAMERA_DRAW_WIDTH + 5
@@ -807,13 +807,12 @@ def ui_thread(addr, route_entries=None, playback="1.0", data_dir=None, prefix="u
     rl.update_texture(top_down_texture, rl.ffi.cast("void *", np.ascontiguousarray(lid_rgba).ctypes.data))
     rl.draw_texture(top_down_texture, CAMERA_DRAW_WIDTH, 0, rl.WHITE)  # noqa: TID251
 
-    SPACING = 25
+    SPACING = 20
     lines = [
       ("ENABLED", GREEN if sm['selfdriveState'].enabled else BLACK),
       ("SPEED: " + str(round(sm['carState'].vEgo, 1)) + " m/s", YELLOW),
       ("LONG CONTROL STATE: " + str(sm['controlsState'].longControlState), YELLOW),
       ("LONG MPC SOURCE: " + str(sm['longitudinalPlan'].longitudinalPlanSource), YELLOW),
-      None,
       (f"RADAR FORMAT: {active_radar_format_name or 'NONE'}", YELLOW),
       (f"RADAR CAN MSGS: {can_range_msg_count}", YELLOW),
       (f"RADAR TRACKS: {len(active_radar_tracks)}"
@@ -826,7 +825,6 @@ def ui_thread(addr, route_entries=None, playback="1.0", data_dir=None, prefix="u
       (f"OFFSET: {current_offset_seconds()}s" if route_entries else "", YELLOW),
       (f"PLAYBACK: {current_playback:.1f}x" if route_entries else "", YELLOW),
       (f"STATUS: {'PAUSED' if paused else 'PLAYING'}" if route_entries else "", YELLOW),
-      ("KEYS: SPACE play/pause, RIGHT next, LEFT prev, M +/-60s, S +/-10s, +/- speed, C checks, H heatmap, Q quit" if route_entries else "KEYS: C checks, H heatmap, Q quit", YELLOW),
       ("ANGLE OFFSET (AVG): " + str(round(sm['liveParameters'].angleOffsetAverageDeg, 2)) + " deg", YELLOW),
       ("ANGLE OFFSET (INSTANT): " + str(round(sm['liveParameters'].angleOffsetDeg, 2)) + " deg", YELLOW),
       ("STIFFNESS: " + str(round(sm['liveParameters'].stiffnessFactor * 100.0, 2)) + " %", YELLOW),
