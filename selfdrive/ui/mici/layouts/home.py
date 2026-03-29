@@ -1,4 +1,5 @@
 import datetime
+import math
 import time
 
 from cereal import log
@@ -91,6 +92,8 @@ class MiciHomeLayout(Widget):
     self._mouse_down_t: None | float = None
     self._did_long_press = False
     self._is_pressed_prev = False
+    self._title_press_pos: MousePos | None = None
+    self._title_touch_active = False
 
     self._version_text = None
     self._experimental_mode = False
@@ -114,8 +117,6 @@ class MiciHomeLayout(Widget):
     self._date_label = UnifiedLabel("", font_size=36, text_color=rl.GRAY, font_weight=FontWeight.ROMAN, max_width=480, wrap_text=False)
     self._branch_label = UnifiedLabel("", font_size=36, text_color=rl.GRAY, font_weight=FontWeight.ROMAN, scroll=True)
     self._version_commit_label = UnifiedLabel("", font_size=36, text_color=rl.GRAY, font_weight=FontWeight.ROMAN, max_width=480, wrap_text=False)
-    self._doom_label.set_click_callback(lambda: self._on_doom_click() if self._on_doom_click else None)
-    self._pilot_label.set_click_callback(lambda: self._on_doom_click() if self._on_doom_click else None)
 
   def show_event(self):
     super().show_event()
@@ -152,7 +153,35 @@ class MiciHomeLayout(Widget):
     self._on_settings_click = on_settings
     self._on_doom_click = on_doom
 
+  def _title_rect(self) -> rl.Rectangle:
+    left = min(self._doom_label.rect.x, self._pilot_label.rect.x)
+    top = min(self._doom_label.rect.y, self._pilot_label.rect.y)
+    right = max(self._doom_label.rect.x + self._doom_label.rect.width, self._pilot_label.rect.x + self._pilot_label.rect.width)
+    bottom = max(self._doom_label.rect.y + self._doom_label.rect.height, self._pilot_label.rect.y + self._pilot_label.rect.height)
+    return rl.Rectangle(left, top, right - left, bottom - top)
+
+  def _handle_mouse_press(self, mouse_pos: MousePos):
+    self._title_touch_active = rl.check_collision_point_rec(mouse_pos, self._title_rect())
+    self._title_press_pos = mouse_pos if self._title_touch_active else None
+
+  def _handle_mouse_event(self, mouse_event):
+    if self._title_touch_active and self._title_press_pos is not None and mouse_event.left_down:
+      drag = math.hypot(mouse_event.pos.x - self._title_press_pos.x, mouse_event.pos.y - self._title_press_pos.y)
+      if drag > 20:
+        self._title_touch_active = False
+
   def _handle_mouse_release(self, mouse_pos: MousePos):
+    if self._title_press_pos is not None:
+      drag = math.hypot(mouse_pos.x - self._title_press_pos.x, mouse_pos.y - self._title_press_pos.y)
+      tapped_title = self._title_touch_active and drag <= 20 and rl.check_collision_point_rec(mouse_pos, self._title_rect())
+      self._title_press_pos = None
+      self._title_touch_active = False
+      if tapped_title:
+        if self._on_doom_click:
+          self._on_doom_click()
+        self._did_long_press = False
+        return
+
     if not self._did_long_press:
       if self._on_settings_click:
         self._on_settings_click()

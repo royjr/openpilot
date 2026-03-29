@@ -15,12 +15,11 @@ class DinoHomeLayout(MiciHomeLayout):
                                     max_width=480, wrap_text=False)
     self._pilot_label = UnifiedLabel("pilot", font_size=96, font_weight=FontWeight.DISPLAY, text_color=rl.WHITE,
                                      max_width=480, wrap_text=False)
-    self._doom_label.set_click_callback(lambda: self._on_dino_click() if self._on_dino_click else None)
-    self._pilot_label.set_click_callback(lambda: self._on_dino_click() if self._on_dino_click else None)
 
   def set_callbacks(self, on_settings=None, on_dino=None):
     self._on_settings_click = on_settings
     self._on_dino_click = on_dino
+    self._on_doom_click = on_dino
 
   def _render(self, _):
     footer_h = 48
