@@ -1,5 +1,7 @@
 import math
 import os
+import threading
+import time
 from dataclasses import dataclass
 
 import pyray as rl
@@ -7,7 +9,13 @@ import pyray as rl
 from openpilot.system.ui.lib.application import FontWeight, MouseEvent, MousePos, gui_app
 from openpilot.system.ui.lib.text_measure import measure_text_cached
 from openpilot.system.ui.widgets.nav_widget import NavWidget
-from openpilot.system.hardware import PC
+from openpilot.system.hardware import HARDWARE, PC
+
+try:
+  from inputs import UnpluggedError, get_gamepad
+except ImportError:
+  UnpluggedError = OSError
+  get_gamepad = None
 
 FOV = math.radians(70.0)
 MAX_RAY_DIST = 20.0
@@ -47,6 +55,96 @@ class Enemy:
 _AUDIO_READY = False
 
 
+class DoomJoystick:
+  def __init__(self):
+    self.enabled = get_gamepad is not None
+    self._lock = threading.Lock()
+    self._running = False
+    self._thread = None
+    self.connected = False
+    self.move = 0.0
+    self.turn = 0.0
+    self.fire_pressed = False
+    self.restart_pressed = False
+
+    if HARDWARE.get_device_type() == "pc":
+      self._move_axis = "ABS_Z"
+      self._turn_axis = "ABS_RX"
+      self._flip_map = {"ABS_RZ": self._move_axis}
+    else:
+      self._move_axis = "ABS_RX"
+      self._turn_axis = "ABS_Z"
+      self._flip_map = {"ABS_RY": self._move_axis}
+
+    self._min_axis_value = {self._move_axis: 0.0, self._turn_axis: 0.0}
+    self._max_axis_value = {self._move_axis: 255.0, self._turn_axis: 255.0}
+    self._axes_values = {self._move_axis: 0.0, self._turn_axis: 0.0}
+
+  def start(self):
+    if not self.enabled or self._running:
+      return
+    self._running = True
+    self._thread = threading.Thread(target=self._poll_loop, daemon=True)
+    self._thread.start()
+
+  def stop(self):
+    self._running = False
+
+  def consume_actions(self) -> tuple[bool, bool]:
+    with self._lock:
+      fire = self.fire_pressed
+      restart = self.restart_pressed
+      self.fire_pressed = False
+      self.restart_pressed = False
+      return fire, restart
+
+  def get_axes(self) -> tuple[float, float]:
+    with self._lock:
+      return self.move, self.turn
+
+  def _poll_loop(self):
+    while self._running:
+      try:
+        events = get_gamepad()
+      except (OSError, UnpluggedError):
+        with self._lock:
+          self.connected = False
+          self.move = 0.0
+          self.turn = 0.0
+        time.sleep(0.1)
+        continue
+
+      with self._lock:
+        self.connected = True
+      for joystick_event in events:
+        self._handle_event(joystick_event.code, joystick_event.state)
+
+  def _handle_event(self, code: str, state: int):
+    if code in self._flip_map:
+      code = self._flip_map[code]
+      state = -state
+
+    with self._lock:
+      if code == "BTN_SOUTH" and state == 1:
+        self.fire_pressed = True
+      elif code == "BTN_WEST" and state == 1:
+        self.restart_pressed = True
+      elif code in self._axes_values:
+        self._max_axis_value[code] = max(state, self._max_axis_value[code])
+        self._min_axis_value[code] = min(state, self._min_axis_value[code])
+        low = self._min_axis_value[code]
+        high = self._max_axis_value[code]
+        if high == low:
+          norm = 0.0
+        else:
+          norm = -float((2.0 * (state - low) / (high - low)) - 1.0)
+        norm = norm if abs(norm) > 0.05 else 0.0
+        expo = 0.4
+        self._axes_values[code] = expo * norm ** 3 + (1 - expo) * norm
+        self.move = self._axes_values[self._move_axis]
+        self.turn = self._axes_values[self._turn_axis]
+
+
 class DoomLayout(NavWidget):
   def __init__(self):
     super().__init__()
@@ -66,7 +164,8 @@ class DoomLayout(NavWidget):
     self._message = ""
     self._message_time = 0.0
     self._ui_scale = 1.0
-    self._performance_mode = not PC
+    self._performance_mode = True
+    self._joystick = DoomJoystick()
     self._touch_origin: list[MousePos | None] = [None, None]
     self._touch_current: list[MousePos | None] = [None, None]
     self._touch_dragged: list[bool] = [False, False]
@@ -76,10 +175,12 @@ class DoomLayout(NavWidget):
   def show_event(self):
     super().show_event()
     self._ensure_audio_loaded()
+    self._joystick.start()
     self._start_music()
 
   def hide_event(self):
     self._stop_music()
+    self._joystick.stop()
     super().hide_event()
 
   def _reset(self):
@@ -191,6 +292,22 @@ class DoomLayout(NavWidget):
     touch_move, touch_turn = self._get_virtual_pad_input()
     move_dir += touch_move
     turn_dir += touch_turn
+
+    joy_move, joy_turn = self._joystick.get_axes()
+    move_dir += joy_move
+    turn_dir += joy_turn
+
+    joy_fire, joy_restart = self._joystick.consume_actions()
+    if joy_restart:
+      self._reset()
+    elif joy_fire:
+      if self._win or self._dead:
+        self._reset()
+      else:
+        self._fire()
+
+    move_dir = max(-1.0, min(1.0, move_dir))
+    turn_dir = max(-1.0, min(1.0, turn_dir))
 
     self._player_angle = (self._player_angle + turn_dir * TURN_SPEED * dt) % math.tau
     if not self._win and not self._dead:
@@ -373,6 +490,16 @@ class DoomLayout(NavWidget):
     time_text = f"TIME {self._elapsed:05.1f}"
     time_size = measure_text_cached(self._font, time_text, title_font)
     rl.draw_text_ex(self._font, time_text, rl.Vector2(self._hud_rect.x + self._hud_rect.width - time_size.x - 30 * self._ui_scale, self._hud_rect.y + 22 * self._ui_scale), title_font, 0, rl.Color(255, 220, 210, 255))
+
+    joy_text = self._joystick_status_text()
+    joy_font = (18 if self._performance_mode else 22) * self._ui_scale
+    joy_color = rl.Color(120, 220, 140, 255) if "ON" in joy_text else rl.Color(180, 180, 180, 220)
+    rl.draw_text_ex(self._hud_font, joy_text, rl.Vector2(self._hud_rect.x + 30 * self._ui_scale, self._hud_rect.y + self._hud_rect.height - 28 * self._ui_scale), joy_font, 0, joy_color)
+
+  def _joystick_status_text(self) -> str:
+    if not self._joystick.enabled:
+      return "PAD OFF"
+    return "PAD ON" if self._joystick.connected else "PAD WAIT"
 
   def _get_virtual_pad_input(self) -> tuple[float, float]:
     for slot in range(len(self._touch_origin)):
