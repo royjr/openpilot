@@ -14,6 +14,9 @@ JUMP_VELOCITY = -1200.0
 GROUND_MARGIN = 90.0
 LAYOUT_DIR = os.path.dirname(__file__)
 HOTZ_PATH = os.path.join(LAYOUT_DIR, "hotz.png")
+GREEN = rl.Color(80, 170, 80, 255)
+WHITE = rl.Color(245, 245, 245, 255)
+BLACK = rl.Color(8, 8, 8, 255)
 
 
 class DinoLayout(NavWidget):
@@ -69,7 +72,7 @@ class DinoLayout(NavWidget):
     dt = max(1.0 / 120.0, min(1.0 / 20.0, rl.get_frame_time() or (1.0 / 60.0)))
     self._update_sim(dt)
 
-    rl.draw_rectangle_rec(rect, rl.Color(247, 247, 247, 255))
+    rl.draw_rectangle_rec(rect, BLACK)
     self._draw_world()
     self._draw_hud()
     if self._dead:
@@ -155,8 +158,8 @@ class DinoLayout(NavWidget):
     return rl.Rectangle(obstacle["x"], obstacle["y"], obstacle["w"], obstacle["h"])
 
   def _draw_chrome_dino(self, dino: rl.Rectangle):
-    body = rl.Color(40, 40, 40, 255)
-    eye = rl.WHITE if not self._dead else rl.Color(255, 120, 120, 255)
+    body = WHITE
+    eye = BLACK if not self._dead else rl.Color(255, 160, 160, 255)
 
     rl.draw_rectangle(int(dino.x + 12 * self._ui_scale), int(dino.y + 14 * self._ui_scale),
                       int(30 * self._ui_scale), int(30 * self._ui_scale), body)
@@ -177,13 +180,13 @@ class DinoLayout(NavWidget):
 
   def _draw_world(self):
     ground_y = self._ground_y()
-    rl.draw_line(int(self._game_rect.x), int(ground_y), int(self._game_rect.x + self._game_rect.width), int(ground_y), rl.BLACK)
+    rl.draw_line(int(self._game_rect.x), int(ground_y), int(self._game_rect.x + self._game_rect.width), int(ground_y), WHITE)
 
     # Simple parallax dots
     dot_y = self._game_rect.y + 90.0 * self._ui_scale
     for i in range(8):
       x = self._game_rect.x + ((i * 170 + int(self._score * 2)) % int(self._game_rect.width + 200)) - 100
-      rl.draw_circle(int(x), int(dot_y + (i % 3) * 18 * self._ui_scale), max(1, int(3 * self._ui_scale)), rl.Color(180, 180, 180, 255))
+      rl.draw_circle(int(x), int(dot_y + (i % 3) * 18 * self._ui_scale), max(1, int(3 * self._ui_scale)), rl.Color(255, 255, 255, 120))
 
     # Dino body
     dino = self._dino_rect()
@@ -195,8 +198,8 @@ class DinoLayout(NavWidget):
         src = rl.Rectangle(0, 0, self._hotz_texture.width, self._hotz_texture.height)
         rl.draw_texture_pro(self._hotz_texture, src, rect, rl.Vector2(0, 0), 0.0, rl.WHITE)
         continue
-      body = rl.Color(60, 120, 60, 255)
-      glow = rl.Color(225, 255, 225, 140)
+      body = GREEN
+      glow = rl.Color(220, 255, 220, 170)
       rl.draw_rectangle(int(rect.x + rect.width * 0.35), int(rect.y), int(rect.width * 0.3), int(rect.height), body)
       rl.draw_rectangle(int(rect.x), int(rect.y + rect.height * 0.2), int(rect.width * 0.28), int(rect.height * 0.24), body)
       rl.draw_rectangle(int(rect.x + rect.width * 0.72), int(rect.y + rect.height * 0.42), int(rect.width * 0.28), int(rect.height * 0.18), body)
@@ -206,11 +209,11 @@ class DinoLayout(NavWidget):
     score_text = f"SCORE {int(self._score):05d}"
     speed_text = f"SPEED {int(self._speed):04d}"
     font_size = 28.0 * self._ui_scale
-    rl.draw_text_ex(self._hud_font, "DINOPILOT", rl.Vector2(self._game_rect.x, self._game_rect.y), 34.0 * self._ui_scale, 0, rl.Color(60, 60, 60, 255))
+    rl.draw_text_ex(self._hud_font, "DINOPILOT", rl.Vector2(self._game_rect.x, self._game_rect.y), 34.0 * self._ui_scale, 0, GREEN)
 
     score_size = measure_text_cached(self._font, score_text, font_size)
-    rl.draw_text_ex(self._font, score_text, rl.Vector2(self._game_rect.x + self._game_rect.width - score_size.x, self._game_rect.y + 2.0 * self._ui_scale), font_size, 0, rl.Color(60, 60, 60, 255))
-    rl.draw_text_ex(self._hud_font, speed_text, rl.Vector2(self._game_rect.x, self._game_rect.y + 38.0 * self._ui_scale), 22.0 * self._ui_scale, 0, rl.Color(120, 120, 120, 255))
+    rl.draw_text_ex(self._font, score_text, rl.Vector2(self._game_rect.x + self._game_rect.width - score_size.x, self._game_rect.y + 2.0 * self._ui_scale), font_size, 0, WHITE)
+    rl.draw_text_ex(self._hud_font, speed_text, rl.Vector2(self._game_rect.x, self._game_rect.y + 38.0 * self._ui_scale), 22.0 * self._ui_scale, 0, rl.Color(180, 220, 180, 255))
 
   def _draw_game_over(self):
     text = "TAP TO RUN AGAIN"
@@ -218,5 +221,5 @@ class DinoLayout(NavWidget):
     size = measure_text_cached(self._font, text, font_size)
     x = self._game_rect.x + (self._game_rect.width - size.x) / 2
     y = self._game_rect.y + self._game_rect.height * 0.32
-    rl.draw_text_ex(self._font, "GAME OVER", rl.Vector2(x + 4 * self._ui_scale, y - 60 * self._ui_scale), 54.0 * self._ui_scale, 0, rl.Color(40, 40, 40, 255))
-    rl.draw_text_ex(self._hud_font, text, rl.Vector2(x, y), font_size, 0, rl.Color(90, 90, 90, 255))
+    rl.draw_text_ex(self._font, "GAME OVER", rl.Vector2(x + 4 * self._ui_scale, y - 60 * self._ui_scale), 54.0 * self._ui_scale, 0, WHITE)
+    rl.draw_text_ex(self._hud_font, text, rl.Vector2(x, y), font_size, 0, GREEN)
