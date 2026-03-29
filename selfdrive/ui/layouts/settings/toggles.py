@@ -28,6 +28,7 @@ DESCRIPTIONS = {
     "without a turn signal activated while driving over 31 mph (50 km/h)."
   ),
   "AlwaysOnDM": tr_noop("Enable driver monitoring even when openpilot is not engaged."),
+  "HotzMode": tr_noop("Use hotz.png for Doom enemies and Dino obstacles."),
   'RecordFront': tr_noop("Upload data from the driver facing camera and help improve the driver monitoring algorithm."),
   "IsMetric": tr_noop("Display speed in km/h instead of mph."),
   "RecordAudio": tr_noop("Record and store microphone audio while driving. The audio will be included in the dashcam video in comma connect."),
@@ -42,6 +43,12 @@ class TogglesLayout(Widget):
 
     # param, title, desc, icon, needs_restart
     self._toggle_defs = {
+      "HotzMode": (
+        lambda: tr("Hotz Mode"),
+        DESCRIPTIONS["HotzMode"],
+        "driver_face.png",
+        False,
+      ),
       "OpenpilotEnabledToggle": (
         lambda: tr("Enable openpilot"),
         DESCRIPTIONS["OpenpilotEnabledToggle"],

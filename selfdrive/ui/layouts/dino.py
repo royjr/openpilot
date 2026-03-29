@@ -1,3 +1,4 @@
+import os
 import random
 
 import pyray as rl
@@ -5,10 +6,13 @@ import pyray as rl
 from openpilot.system.ui.lib.application import FontWeight, MousePos, gui_app
 from openpilot.system.ui.lib.text_measure import measure_text_cached
 from openpilot.system.ui.widgets.nav_widget import NavWidget
+from openpilot.selfdrive.ui.ui_state import ui_state
 
 GRAVITY = 2200.0
 JUMP_VELOCITY = -1200.0
 GROUND_MARGIN = 90.0
+LAYOUT_DIR = os.path.dirname(__file__)
+HOTZ_PATH = os.path.join(LAYOUT_DIR, "hotz.png")
 
 
 class DinoLayout(NavWidget):
@@ -18,6 +22,9 @@ class DinoLayout(NavWidget):
     self._hud_font = gui_app.font(FontWeight.MEDIUM)
     self._game_rect = rl.Rectangle(0, 0, 0, 0)
     self._ui_scale = 1.0
+    self._hotz_texture = None
+    self._hotz_mode = False
+    self._last_hotz_refresh = 0.0
     self._reset()
 
   def hide_event(self):
@@ -51,6 +58,7 @@ class DinoLayout(NavWidget):
       self._jump()
 
   def _render(self, rect: rl.Rectangle):
+    self._refresh_hotz_mode()
     dt = max(1.0 / 120.0, min(1.0 / 20.0, rl.get_frame_time() or (1.0 / 60.0)))
     self._update_sim(dt)
 
@@ -59,6 +67,18 @@ class DinoLayout(NavWidget):
     self._draw_hud()
     if self._dead:
       self._draw_game_over()
+
+  def _refresh_hotz_mode(self, force: bool = False):
+    now = rl.get_time()
+    if force or now - self._last_hotz_refresh > 0.25:
+      self._hotz_mode = ui_state.params.get_bool("HotzMode")
+      self._last_hotz_refresh = now
+      if self._hotz_mode:
+        self._ensure_hotz_texture()
+
+  def _ensure_hotz_texture(self):
+    if self._hotz_texture is None and os.path.exists(HOTZ_PATH):
+      self._hotz_texture = rl.load_texture(HOTZ_PATH)
 
   def _update_sim(self, dt: float):
     if rl.is_key_pressed(rl.KeyboardKey.KEY_ESCAPE):
@@ -144,6 +164,10 @@ class DinoLayout(NavWidget):
 
     for obstacle in self._obstacles:
       rect = rl.Rectangle(obstacle["x"], obstacle["y"], obstacle["w"], obstacle["h"])
+      if self._hotz_mode and self._hotz_texture is not None and self._hotz_texture.width > 0 and self._hotz_texture.height > 0:
+        src = rl.Rectangle(0, 0, self._hotz_texture.width, self._hotz_texture.height)
+        rl.draw_texture_pro(self._hotz_texture, src, rect, rl.Vector2(0, 0), 0.0, rl.WHITE)
+        continue
       rl.draw_rectangle_rounded(rect, 0.18, 6, rl.Color(60, 120, 60, 255))
       rl.draw_line(int(rect.x + rect.width / 2), int(rect.y), int(rect.x + rect.width / 2), int(rect.y + rect.height), rl.Color(235, 255, 235, 120))
 

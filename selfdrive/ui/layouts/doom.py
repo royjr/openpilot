@@ -10,6 +10,7 @@ from openpilot.system.ui.lib.application import FontWeight, MouseEvent, MousePos
 from openpilot.system.ui.lib.text_measure import measure_text_cached
 from openpilot.system.ui.widgets.nav_widget import NavWidget
 from openpilot.system.hardware import HARDWARE, PC
+from openpilot.selfdrive.ui.ui_state import ui_state
 
 try:
   from inputs import UnpluggedError, get_gamepad
@@ -28,6 +29,7 @@ VIRTUAL_PAD_MAX_RADIUS = 120.0
 LAYOUT_DIR = os.path.dirname(__file__)
 DOOM_MUSIC_PATH = os.path.join(LAYOUT_DIR, "doom.mp3")
 DOOM_DIE_PATH = os.path.join(LAYOUT_DIR, "doom_die.mp3")
+HOTZ_PATH = os.path.join(LAYOUT_DIR, "hotz.png")
 
 MAP = [
   "############",
@@ -172,6 +174,9 @@ class DoomLayout(NavWidget):
     self._success_sound = None
     self._death_sound = None
     self._audio_loaded = False
+    self._hotz_texture = None
+    self._hotz_mode = False
+    self._last_hotz_refresh = 0.0
 
     self._flash = 0.0
     self._fire_cooldown = 0.0
@@ -188,7 +193,9 @@ class DoomLayout(NavWidget):
 
   def show_event(self):
     super().show_event()
+    self._refresh_hotz_mode(force=True)
     self._ensure_audio_loaded()
+    self._ensure_hotz_texture()
     self._joystick.start()
     self._start_music()
 
@@ -228,6 +235,7 @@ class DoomLayout(NavWidget):
     self._view_rect = rl.Rectangle(self._rect.x + margin, self._rect.y + top_h, self._rect.width - margin * 2, self._rect.height - top_h - bottom_h)
 
   def _render(self, rect: rl.Rectangle):
+    self._refresh_hotz_mode()
     dt = max(1.0 / 120.0, min(1.0 / 20.0, rl.get_frame_time() or (1.0 / 60.0)))
     self._update_sim(dt)
     self._tick_audio()
@@ -240,6 +248,16 @@ class DoomLayout(NavWidget):
     self._draw_hud()
     self._draw_virtual_pad()
     self._draw_overlays()
+
+  def _refresh_hotz_mode(self, force: bool = False):
+    now = rl.get_time()
+    if force or now - self._last_hotz_refresh > 0.25:
+      self._hotz_mode = ui_state.params.get_bool("HotzMode")
+      self._last_hotz_refresh = now
+
+  def _ensure_hotz_texture(self):
+    if self._hotz_texture is None and os.path.exists(HOTZ_PATH):
+      self._hotz_texture = rl.load_texture(HOTZ_PATH)
 
   def _handle_mouse_event(self, mouse_event: MouseEvent) -> None:
     super()._handle_mouse_event(mouse_event)
@@ -433,6 +451,7 @@ class DoomLayout(NavWidget):
       rl.draw_rectangle(int(self._view_rect.x + col), int(wall_y), stripe_w + 1, int(wall_height), color)
 
   def _draw_enemies(self):
+    self._ensure_hotz_texture()
     live = []
     for enemy in self._enemies:
       if not enemy.alive:
@@ -453,6 +472,14 @@ class DoomLayout(NavWidget):
       size = min(180.0 * self._ui_scale, self._view_rect.height / max(dist, 0.1))
       x = self._view_rect.x + (rel + FOV / 2) / FOV * self._view_rect.width
       y = self._view_rect.y + self._view_rect.height / 2 + 25 * self._ui_scale / max(dist, 0.3)
+      if self._hotz_mode and self._hotz_texture is not None and self._hotz_texture.width > 0 and self._hotz_texture.height > 0:
+        aspect = self._hotz_texture.width / self._hotz_texture.height
+        sprite_h = size * 1.28
+        sprite_w = sprite_h * aspect
+        dest = rl.Rectangle(x - sprite_w / 2, y - sprite_h * 0.72, sprite_w, sprite_h)
+        src = rl.Rectangle(0, 0, self._hotz_texture.width, self._hotz_texture.height)
+        rl.draw_texture_pro(self._hotz_texture, src, dest, rl.Vector2(0, 0), 0.0, rl.WHITE)
+        continue
       body = rl.Color(180, 20, 20, 255)
       glow = rl.Color(255, 80, 20, 170)
       rl.draw_circle_gradient(int(x), int(y - size * 0.15), int(size * 0.42), glow, body)
