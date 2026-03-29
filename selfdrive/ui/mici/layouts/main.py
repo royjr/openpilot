@@ -173,9 +173,12 @@ class MiciMainLayout(Scroller):
       gui_app.pop_widgets_to(self, lambda: self._scroll_outer_to(self._onroad_layout))
     self._prev_standstill = CS.standstill
 
+  def _game_active(self) -> bool:
+    return gui_app.get_active_widget() in (self._doom_layout, self._dino_layout)
+
   def _on_interactive_timeout(self):
     # Don't pop if onboarding
-    if gui_app.widget_in_stack(self._onboarding_window):
+    if gui_app.widget_in_stack(self._onboarding_window) or self._game_active():
       return
 
     if ui_state.started:
