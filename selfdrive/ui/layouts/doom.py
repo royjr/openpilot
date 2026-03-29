@@ -74,7 +74,7 @@ class DoomJoystick:
     #   self._turn_axis = "ABS_RX"
     #   self._flip_map = {"ABS_RZ": self._move_axis}
     # else:
-    self._move_axis = "ABS_RX"
+    self._move_axis = "ABS_Y"
     self._turn_axis = "ABS_Z"
     self._flip_map = {"ABS_RY": self._move_axis}
 
@@ -129,9 +129,9 @@ class DoomJoystick:
       state = -state
 
     with self._lock:
-      if code == "BTN_SOUTH" and state == 1:
+      if code == "BTN_WEST" or code == "BTN_Z" and state == 1:
         self.fire_pressed = True
-      elif code == "BTN_WEST" and state == 1:
+      elif code == "BTN_TL2" or code == "BTN_TR2" and state == 1:
         self.restart_pressed = True
       elif code in self._axes_values:
         self._max_axis_value[code] = max(state, self._max_axis_value[code])
@@ -146,7 +146,7 @@ class DoomJoystick:
         expo = 0.4
         self._axes_values[code] = expo * norm ** 3 + (1 - expo) * norm
         self.move = self._axes_values[self._move_axis]
-        self.turn = self._axes_values[self._turn_axis]
+        self.turn = -self._axes_values[self._turn_axis]
 
   def _debug_event(self, code: str, state: int):
     prev = self._last_debug_values.get(code)
