@@ -7,6 +7,7 @@ import pyray as rl
 from openpilot.system.ui.lib.application import FontWeight, MousePos, gui_app
 from openpilot.system.ui.lib.text_measure import measure_text_cached
 from openpilot.system.ui.widgets.nav_widget import NavWidget
+from openpilot.system.hardware import PC
 
 FOV = math.radians(70.0)
 MAX_RAY_DIST = 20.0
@@ -63,6 +64,7 @@ class DoomLayout(NavWidget):
     self._message = ""
     self._message_time = 0.0
     self._ui_scale = 1.0
+    self._performance_mode = not PC
 
     self._reset()
 
@@ -196,17 +198,46 @@ class DoomLayout(NavWidget):
     return MAP[iy][ix]
 
   def _cast_ray(self, angle: float) -> tuple[float, str]:
-    ray_x = self._player_x
-    ray_y = self._player_y
-    step = 0.02
+    dir_x = math.cos(angle)
+    dir_y = math.sin(angle)
+    map_x = int(self._player_x)
+    map_y = int(self._player_y)
+
+    delta_x = abs(1.0 / dir_x) if abs(dir_x) > 1e-6 else float("inf")
+    delta_y = abs(1.0 / dir_y) if abs(dir_y) > 1e-6 else float("inf")
+
+    if dir_x < 0:
+      step_x = -1
+      side_x = (self._player_x - map_x) * delta_x
+    else:
+      step_x = 1
+      side_x = (map_x + 1.0 - self._player_x) * delta_x
+
+    if dir_y < 0:
+      step_y = -1
+      side_y = (self._player_y - map_y) * delta_y
+    else:
+      step_y = 1
+      side_y = (map_y + 1.0 - self._player_y) * delta_y
+
     dist = 0.0
     while dist < MAX_RAY_DIST:
-      ray_x += math.cos(angle) * step
-      ray_y += math.sin(angle) * step
-      dist += step
-      tile = self._tile_at(ray_x, ray_y)
+      if side_x < side_y:
+        map_x += step_x
+        dist = side_x
+        side_x += delta_x
+      else:
+        map_y += step_y
+        dist = side_y
+        side_y += delta_y
+
+      if map_y < 0 or map_y >= len(MAP) or map_x < 0 or map_x >= len(MAP[0]):
+        return min(dist, MAX_RAY_DIST), "#"
+
+      tile = MAP[map_y][map_x]
       if tile != ".":
-        return dist, tile
+        return min(dist, MAX_RAY_DIST), tile
+
     return MAX_RAY_DIST, "."
 
   def _draw_view(self):
@@ -215,7 +246,7 @@ class DoomLayout(NavWidget):
     rl.draw_rectangle(int(self._view_rect.x), int(self._view_rect.y), int(self._view_rect.width), int(self._view_rect.height / 2), sky)
     rl.draw_rectangle(int(self._view_rect.x), int(self._view_rect.y + self._view_rect.height / 2), int(self._view_rect.width), int(self._view_rect.height / 2), floor)
 
-    stripe_w = max(2, int(4 * self._ui_scale))
+    stripe_w = max(6 if self._performance_mode else 2, int((8 if self._performance_mode else 4) * self._ui_scale))
     for col in range(0, int(self._view_rect.width), stripe_w):
       ray_angle = self._player_angle - FOV / 2 + (col / max(self._view_rect.width, 1.0)) * FOV
       dist, tile = self._cast_ray(ray_angle)
@@ -270,6 +301,9 @@ class DoomLayout(NavWidget):
     rl.draw_line(int(cx), int(cy + inner), int(cx), int(cy + outer), color)
 
   def _draw_minimap(self):
+    if self._performance_mode:
+      return
+
     scale = max(8, int(16 * self._ui_scale))
     offset = 20.0 * self._ui_scale
     map_rect = rl.Rectangle(self._view_rect.x + offset, self._view_rect.y + offset, len(MAP[0]) * scale, len(MAP) * scale)
@@ -294,8 +328,8 @@ class DoomLayout(NavWidget):
     rl.draw_line(int(px), int(py), int(px + math.cos(self._player_angle) * 12 * self._ui_scale), int(py + math.sin(self._player_angle) * 12 * self._ui_scale), rl.WHITE)
 
   def _draw_hud(self):
-    rl.draw_rectangle_rounded(self._hud_rect, 0.22, 12, rl.Color(15, 0, 0, 210))
-    title_font = 42 * self._ui_scale
+    rl.draw_rectangle_rounded(self._hud_rect, 0.22, 12, rl.Color(15, 0, 0, 190))
+    title_font = (34 if self._performance_mode else 42) * self._ui_scale
     text = f"KILLS {self._kills:02d}/{len(self._enemies):02d}"
     rl.draw_text_ex(self._font, text, rl.Vector2(self._hud_rect.x + 30 * self._ui_scale, self._hud_rect.y + 22 * self._ui_scale), title_font, 0, rl.Color(255, 220, 210, 255))
 
