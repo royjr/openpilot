@@ -52,6 +52,11 @@ CAMERA_RADAR_Y_OFFSET = 25
 REPLAY_PATH = os.path.join(os.path.dirname(__file__), "replay")
 REPLAY_SOCKET_WAIT_TIMEOUT_SECONDS = 10.0
 REPLAY_SPEEDS = (0.2, 0.5, 1.0, 2.0, 4.0, 8.0)
+CAMERA_DRAW_WIDTH = 640
+CAMERA_DRAW_HEIGHT = 480
+TOP_DOWN_DRAW_WIDTH = 384
+PLOT_DRAW_WIDTH = 480
+PLOT_DRAW_HEIGHT = 480
 
 
 @dataclass
@@ -93,8 +98,15 @@ def draw_radar_points_camera(tracks, img, calibration):
 
 
 def draw_loading_overlay(font, lines, camera_texture, top_down_texture, hor_mode, panel_x, panel_y):
-  rl.draw_texture(camera_texture, 0, 0, rl.WHITE)  # noqa: TID251
-  rl.draw_texture(top_down_texture, 640, 0, rl.WHITE)  # noqa: TID251
+  rl.draw_texture_pro(
+    camera_texture,
+    rl.Rectangle(0, 0, camera_texture.width, camera_texture.height),
+    rl.Rectangle(0, 0, CAMERA_DRAW_WIDTH, CAMERA_DRAW_HEIGHT),
+    rl.Vector2(0, 0),
+    0.0,
+    rl.WHITE,
+  )
+  rl.draw_texture(top_down_texture, CAMERA_DRAW_WIDTH, 0, rl.WHITE)  # noqa: TID251
 
   if hor_mode:
     panel_width = 620
@@ -229,12 +241,12 @@ def ui_thread(addr, route_entries=None, playback="1.0", data_dir=None, prefix="u
   hor_mode = True if max_height < 960 + 300 else hor_mode
 
   if hor_mode:
-    size = (640 + 384 + 640, 960)
+    size = (CAMERA_DRAW_WIDTH + TOP_DOWN_DRAW_WIDTH + PLOT_DRAW_WIDTH, 960)
     write_x = 5
     write_y = 680
   else:
-    size = (640 + 384, 960 + 300)
-    write_x = 645
+    size = (CAMERA_DRAW_WIDTH + TOP_DOWN_DRAW_WIDTH, 960 + 300)
+    write_x = CAMERA_DRAW_WIDTH + 5
     write_y = 970
 
   rl.set_trace_log_level(rl.TraceLogLevel.LOG_ERROR)
@@ -524,7 +536,7 @@ def ui_thread(addr, route_entries=None, playback="1.0", data_dir=None, prefix="u
     rgb = cv2.cvtColor(imgff[: h * 3 // 2, : w], cv2.COLOR_YUV2RGB_NV12)
 
     qcam = "QCAM" in os.environ
-    bb_scale = 0.8
+    bb_scale = 0.825 if qcam else 0.8
     calib_scale = camera.fcam.width / 640.0
     zoom_matrix = np.asarray([[bb_scale, 0.0, 0.0], [0.0, bb_scale, 0.0], [0.0, 0.0, 1.0]])
     cv2.warpAffine(rgb, zoom_matrix[:2], (img.shape[1], img.shape[0]), dst=img, flags=cv2.WARP_INVERSE_MAP)
@@ -673,7 +685,14 @@ def ui_thread(addr, route_entries=None, playback="1.0", data_dir=None, prefix="u
     # Update camera texture from numpy array
     img_rgba = cv2.cvtColor(img, cv2.COLOR_RGB2RGBA)
     rl.update_texture(camera_texture, rl.ffi.cast("void *", img_rgba.ctypes.data))
-    rl.draw_texture(camera_texture, 0, 0, rl.WHITE)  # noqa: TID251
+    rl.draw_texture_pro(
+      camera_texture,
+      rl.Rectangle(0, 0, camera_texture.width, camera_texture.height),
+      rl.Rectangle(0, 0, CAMERA_DRAW_WIDTH, CAMERA_DRAW_HEIGHT),
+      rl.Vector2(0, 0),
+      0.0,
+      rl.WHITE,
+    )
 
     # display alerts
     rl.draw_text_ex(font, sm['selfdriveState'].alertText1, rl.Vector2(180, 150), 30, 0, rl.RED)
@@ -682,15 +701,22 @@ def ui_thread(addr, route_entries=None, playback="1.0", data_dir=None, prefix="u
     # draw plots (texture is reused internally)
     plot_texture = draw_plots(plot_arr)
     if hor_mode:
-      rl.draw_texture(plot_texture, 640 + 384, 0, rl.WHITE)  # noqa: TID251
+      rl.draw_texture_pro(
+        plot_texture,
+        rl.Rectangle(0, 0, plot_texture.width, plot_texture.height),
+        rl.Rectangle(CAMERA_DRAW_WIDTH + TOP_DOWN_DRAW_WIDTH, 0, PLOT_DRAW_WIDTH, PLOT_DRAW_HEIGHT),
+        rl.Vector2(0, 0),
+        0.0,
+        rl.WHITE,
+      )
     else:
-      rl.draw_texture(plot_texture, 0, 600, rl.WHITE)  # noqa: TID251
+      rl.draw_texture(plot_texture, 0, 300, rl.WHITE)  # noqa: TID251
 
     # Convert lid_overlay to RGBA and update top_down texture
     # lid_overlay is (384, 960), need to transpose to (960, 384) for row-major RGBA buffer
     lid_rgba = palette[lid_overlay.T]
     rl.update_texture(top_down_texture, rl.ffi.cast("void *", np.ascontiguousarray(lid_rgba).ctypes.data))
-    rl.draw_texture(top_down_texture, 640, 0, rl.WHITE)  # noqa: TID251
+    rl.draw_texture(top_down_texture, CAMERA_DRAW_WIDTH, 0, rl.WHITE)  # noqa: TID251
 
     SPACING = 25
     lines = [
