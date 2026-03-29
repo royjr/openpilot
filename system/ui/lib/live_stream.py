@@ -10,7 +10,6 @@ STREAM_ENABLED = os.getenv("UI_STREAM") == "1"
 STREAM_HOST = os.getenv("UI_STREAM_HOST", "0.0.0.0")
 STREAM_PORT = int(os.getenv("UI_STREAM_PORT", "8765"))
 STREAM_FPS = float(os.getenv("UI_STREAM_FPS", "3.0"))
-STREAM_SCALE = max(0.1, min(1.0, float(os.getenv("UI_STREAM_SCALE", "0.5"))))
 
 HTML = """<!doctype html>
 <html>
@@ -49,6 +48,10 @@ HTML = """<!doctype html>
   <script>
     const img = document.getElementById("screen");
     const meta = document.getElementById("meta");
+    function refresh() {
+      img.src = "/frame.bmp?t=" + Date.now();
+      meta.textContent = "updated " + new Date().toLocaleTimeString();
+    }
     let inFlight = false;
     function loop() {
       if (inFlight) return;
@@ -102,10 +105,7 @@ class UILiveStream:
           if not data:
             self.send_response(503)
             self.end_headers()
-            try:
-              self.wfile.write(b"waiting for first frame")
-            except (BrokenPipeError, ConnectionResetError):
-              pass
+            self.wfile.write(b"waiting for first frame")
             return
           self.send_response(200)
           self.send_header("Content-Type", "image/bmp")
@@ -140,29 +140,10 @@ class UILiveStream:
     now = time.monotonic()
     if now - self._last_update < self._min_interval:
       return
-    if STREAM_SCALE < 0.999:
-      width, height, rgba_bytes = _downscale_rgba(width, height, rgba_bytes, STREAM_SCALE)
     bmp = _rgba_to_bmp(width, height, rgba_bytes)
     with self._lock:
       self._frame_bytes = bmp
     self._last_update = now
-
-
-def _downscale_rgba(width: int, height: int, rgba_bytes: bytes, scale: float) -> tuple[int, int, bytes]:
-  target_width = max(1, int(width * scale))
-  target_height = max(1, int(height * scale))
-  if target_width == width and target_height == height:
-    return width, height, rgba_bytes
-
-  scaled = bytearray(target_width * target_height * 4)
-  for y in range(target_height):
-    src_y = min(height - 1, int(y * height / target_height))
-    for x in range(target_width):
-      src_x = min(width - 1, int(x * width / target_width))
-      src_i = (src_y * width + src_x) * 4
-      dst_i = (y * target_width + x) * 4
-      scaled[dst_i:dst_i + 4] = rgba_bytes[src_i:src_i + 4]
-  return target_width, target_height, bytes(scaled)
 
 
 def _rgba_to_bmp(width: int, height: int, rgba_bytes: bytes) -> bytes:
