@@ -674,8 +674,13 @@ def ui_thread(addr, route_entries=None, playback="1.0", data_dir=None, prefix="u
       track for track_key, track in radar_tracks.items()
       if active_radar_format_name is not None and track_key[0] == active_radar_format_name
     ]
+    active_radar_buses = sorted({
+      track_key[1] for track_key in radar_tracks
+      if active_radar_format_name is not None and track_key[0] == active_radar_format_name
+    })
     if len(active_radar_tracks) == 0:
       active_radar_tracks = sm['liveTracks'].points
+      active_radar_buses = []
 
     # draw decoded radar tracks when present, otherwise fall back to liveTracks
     draw_radar_points(active_radar_tracks, top_down[1])
@@ -727,7 +732,9 @@ def ui_thread(addr, route_entries=None, playback="1.0", data_dir=None, prefix="u
       None,
       (f"RADAR FORMAT: {active_radar_format_name or 'NONE'}", YELLOW),
       (f"RADAR CAN MSGS: {can_range_msg_count}", YELLOW),
-      (f"RADAR TRACKS: {len(active_radar_tracks)}", YELLOW),
+      (f"RADAR TRACKS: {len(active_radar_tracks)}"
+       + (f" (BUS {','.join(str(bus) for bus in active_radar_buses)})" if active_radar_buses else ""),
+       YELLOW),
       (f"RADAR STATE CHECKS: {'ON' if state_checks_enabled else 'OFF'}", YELLOW),
       (f"ROUTE: {current_route_name}" if current_route_name is not None else "", YELLOW),
       (f"PLATFORM: {current_route_model}" if current_route_model is not None else "", YELLOW),
