@@ -29,6 +29,7 @@ DESCRIPTIONS = {
   ),
   "AlwaysOnDM": tr_noop("Enable driver monitoring even when openpilot is not engaged."),
   "HotzMode": tr_noop("Use hotz.png for Doom enemies and Dino obstacles."),
+  "QuietMode": tr_noop("Lower alert sound volume."),
   'RecordFront': tr_noop("Upload data from the driver facing camera and help improve the driver monitoring algorithm."),
   "IsMetric": tr_noop("Display speed in km/h instead of mph."),
   "RecordAudio": tr_noop("Record and store microphone audio while driving. The audio will be included in the dashcam video in comma connect."),
@@ -47,6 +48,12 @@ class TogglesLayout(Widget):
         lambda: tr("Hotz Mode"),
         DESCRIPTIONS["HotzMode"],
         "driver_face.png",
+        False,
+      ),
+      "QuietMode": (
+        lambda: tr("Quiet Mode"),
+        DESCRIPTIONS["QuietMode"],
+        "warning.png",
         False,
       ),
       "OpenpilotEnabledToggle": (

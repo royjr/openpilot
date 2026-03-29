@@ -107,6 +107,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"PandaSomResetTriggered", {CLEAR_ON_MANAGER_START | CLEAR_ON_OFFROAD_TRANSITION, BOOL}},
     {"PandaSignatures", {CLEAR_ON_MANAGER_START, BYTES}},
     {"PrimeType", {PERSISTENT, INT}},
+    {"QuietMode", {PERSISTENT, BOOL}},
     {"RecordAudio", {PERSISTENT, BOOL}},
     {"RecordAudioFeedback", {PERSISTENT, BOOL, "0"}},
     {"RecordFront", {PERSISTENT, BOOL}},

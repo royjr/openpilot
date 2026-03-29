@@ -6,6 +6,7 @@ import wave
 
 from cereal import car, messaging
 from openpilot.common.basedir import BASEDIR
+from openpilot.common.params import Params
 from openpilot.common.filter_simple import FirstOrderFilter
 from openpilot.common.realtime import Ratekeeper
 from openpilot.common.utils import retry
@@ -18,6 +19,8 @@ SAMPLE_RATE = 48000
 SAMPLE_BUFFER = 4096 # (approx 100ms)
 MAX_VOLUME = 1.0
 MIN_VOLUME = 1.0
+QUIET_MAX_VOLUME = 0.2
+QUIET_MIN_VOLUME = 0.2
 SELFDRIVE_STATE_TIMEOUT = 5 # 5 seconds
 FILTER_DT = 1. / (micd.SAMPLE_RATE / micd.FFT_SAMPLES)
 
@@ -63,6 +66,7 @@ def check_selfdrive_timeout_alert(sm):
 
 class Soundd:
   def __init__(self):
+    self.params = Params()
     self.load_sounds()
 
     self.current_alert = AudibleAlert.none
@@ -72,6 +76,11 @@ class Soundd:
     self.selfdrive_timeout_alert = False
 
     self.spl_filter_weighted = FirstOrderFilter(0, 2.5, FILTER_DT, initialized=False)
+
+  def _volume_limits(self) -> tuple[float, float]:
+    if self.params.get_bool("QuietMode"):
+      return QUIET_MIN_VOLUME, QUIET_MAX_VOLUME
+    return MIN_VOLUME, MAX_VOLUME
 
   def load_sounds(self):
     self.loaded_sounds: dict[int, np.ndarray] = {}
@@ -132,9 +141,10 @@ class Soundd:
       self.selfdrive_timeout_alert = False
 
   def calculate_volume(self, weighted_db):
-    volume = ((weighted_db - AMBIENT_DB) / DB_SCALE) * (MAX_VOLUME - MIN_VOLUME) + MIN_VOLUME
+    min_volume, max_volume = self._volume_limits()
+    volume = ((weighted_db - AMBIENT_DB) / DB_SCALE) * (max_volume - min_volume) + min_volume
     # return math.pow(VOLUME_BASE, (np.clip(volume, MIN_VOLUME, MAX_VOLUME) - 1))
-    return MAX_VOLUME
+    return max_volume
 
   @retry(attempts=10, delay=3)
   def get_stream(self, sd):

@@ -72,6 +72,7 @@ class TogglesLayoutMici(NavScroller):
     super().__init__()
 
     hotz_mode_toggle = HotzModeControl()
+    quiet_mode_toggle = BigParamControl("quiet mode", "QuietMode")
     self._personality_toggle = BigMultiParamToggle("driving personality", "LongitudinalPersonality", ["aggressive", "standard", "relaxed"])
     self._experimental_btn = BigParamControl("experimental mode", "ExperimentalMode")
     is_metric_toggle = BigParamControl("use metric units", "IsMetric")
@@ -83,6 +84,7 @@ class TogglesLayoutMici(NavScroller):
 
     self._scroller.add_widgets([
       hotz_mode_toggle,
+      quiet_mode_toggle,
       self._personality_toggle,
       self._experimental_btn,
       is_metric_toggle,
@@ -96,6 +98,7 @@ class TogglesLayoutMici(NavScroller):
     # Toggle lists
     self._refresh_toggles = (
       ("HotzMode", hotz_mode_toggle),
+      ("QuietMode", quiet_mode_toggle),
       ("ExperimentalMode", self._experimental_btn),
       ("IsMetric", is_metric_toggle),
       ("IsLdwEnabled", ldw_toggle),
