@@ -161,6 +161,8 @@ class DoomJoystick:
 
 
 class DoomLayout(NavWidget):
+  BACK_TOUCH_AREA_PERCENTAGE = 0.08
+
   def __init__(self):
     super().__init__()
     self._on_hide: Callable[[], None] | None = None

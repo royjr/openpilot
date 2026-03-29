@@ -22,6 +22,8 @@ BLACK = rl.Color(8, 8, 8, 255)
 
 
 class DinoLayout(NavWidget):
+  BACK_TOUCH_AREA_PERCENTAGE = 0.08
+
   def __init__(self):
     super().__init__()
     self._on_hide: Callable[[], None] | None = None

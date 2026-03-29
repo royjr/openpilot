@@ -22,6 +22,8 @@ SNAKE_MUSIC_PATH = os.path.join(LAYOUT_DIR, "snake.mp3")
 
 
 class SnakeLayout(NavWidget):
+  BACK_TOUCH_AREA_PERCENTAGE = 0.08
+
   def __init__(self):
     super().__init__()
     self._on_hide: Callable[[], None] | None = None
