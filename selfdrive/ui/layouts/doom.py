@@ -194,10 +194,11 @@ class DoomLayout(NavWidget):
 
   def hide_event(self):
     self._stop_music()
+    self._reset(restart_music=False)
     self._joystick.stop()
     super().hide_event()
 
-  def _reset(self):
+  def _reset(self, restart_music: bool = True):
     self._player_x = 1.5
     self._player_y = 1.5
     self._player_angle = 0.25
@@ -214,7 +215,8 @@ class DoomLayout(NavWidget):
       Enemy(9.2, 6.5),
       Enemy(8.5, 9.0),
     ]
-    self._start_music()
+    if restart_music:
+      self._start_music()
 
   def _update_layout_rects(self):
     self._ui_scale = max(0.48, min(1.0, min(self._rect.width / 1920.0, self._rect.height / 1080.0)))
