@@ -43,6 +43,10 @@ class MiciMainLayout(Scroller):
     self._settings_layout = SettingsLayout()
     self._onroad_layout = AugmentedRoadView(bookmark_callback=self._on_bookmark_clicked)
 
+    for widget in (self._home_layout, self._doom_home_layout, self._dino_home_layout,
+                   self._games_layout, self._alerts_layout, self._onroad_layout):
+      widget.set_enabled(lambda self=self: self.enabled)
+
     # Initialize widget rects
     for widget in (self._home_layout, self._doom_home_layout, self._dino_home_layout, self._games_layout, self._settings_layout, self._alerts_layout, self._onroad_layout):
       # TODO: set parent rect and use it if never passed rect from render (like in Scroller)

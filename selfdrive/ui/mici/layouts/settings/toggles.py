@@ -1,3 +1,5 @@
+import os
+import pyray as rl
 from cereal import log
 
 from openpilot.system.ui.widgets.scroller import NavScroller
@@ -7,13 +9,69 @@ from openpilot.selfdrive.ui.layouts.settings.common import restart_needed_callba
 from openpilot.selfdrive.ui.ui_state import ui_state
 
 PERSONALITY_TO_INT = log.LongitudinalPersonality.schema.enumerants
+LAYOUTS_DIR = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "layouts"))
+HOTZSLIP_FRAME_PATHS = [
+  os.path.join(LAYOUTS_DIR, f"frame_{idx}_delay-0.15s.gif") for idx in range(9)
+]
+HOTZSLIP_FRAME_DURATION = 0.12
+HOTZSLIP_SPEED_X = 110.0
+HOTZSLIP_SPEED_Y = 78.0
+
+
+class HotzModeControl(BigParamControl):
+  def __init__(self):
+    super().__init__("hotz mode", "HotzMode")
+    self._hotzslip_textures = [rl.load_texture(path) for path in HOTZSLIP_FRAME_PATHS if os.path.exists(path)]
+
+  def _frame_index(self) -> int:
+    if len(self._hotzslip_textures) <= 1:
+      return 0
+    cycle_len = len(self._hotzslip_textures) * 2 - 2
+    phase = int(rl.get_time() / HOTZSLIP_FRAME_DURATION) % cycle_len
+    if phase < len(self._hotzslip_textures):
+      return phase
+    return cycle_len - phase
+
+  def _reflect(self, value: float, limit: float) -> float:
+    if limit <= 0:
+      return 0.0
+    span = limit * 2.0
+    pos = value % span
+    return pos if pos <= limit else span - pos
+
+  def _dvd_pose(self, btn_y: float, size: float) -> tuple[rl.Vector2, float]:
+    margin = 4.0
+    left = self._rect.x + margin
+    top = btn_y + margin
+    width = max(1.0, self._rect.width - margin * 2 - size)
+    height = max(1.0, self._rect.height - margin * 2 - size)
+    t = rl.get_time()
+    x = left + self._reflect(t * HOTZSLIP_SPEED_X, width)
+    y = top + self._reflect(t * HOTZSLIP_SPEED_Y, height)
+    return rl.Vector2(x + size / 2, y + size / 2), 0.0
+
+  def _render(self, _):
+    txt_bg, btn_x, btn_y, scale = self._handle_background()
+    rl.draw_texture_ex(txt_bg, (btn_x, btn_y), 0, scale, rl.WHITE)
+
+    if len(self._hotzslip_textures) > 0:
+      frame_idx = 0 if not self._checked else self._frame_index()
+      texture = self._hotzslip_textures[frame_idx]
+      if texture.width > 0 and texture.height > 0:
+        src = rl.Rectangle(0, 0, texture.width, texture.height)
+        size = 58.0
+        center, angle = self._dvd_pose(btn_y, size)
+        dest = rl.Rectangle(center.x, center.y, size, size)
+        rl.draw_texture_pro(texture, src, dest, rl.Vector2(size / 2, size / 2), angle, rl.Color(255, 255, 255, 235))
+
+    self._draw_content(btn_y)
 
 
 class TogglesLayoutMici(NavScroller):
   def __init__(self):
     super().__init__()
 
-    hotz_mode_toggle = BigParamControl("hotz mode", "HotzMode")
+    hotz_mode_toggle = HotzModeControl()
     self._personality_toggle = BigMultiParamToggle("driving personality", "LongitudinalPersonality", ["aggressive", "standard", "relaxed"])
     self._experimental_btn = BigParamControl("experimental mode", "ExperimentalMode")
     is_metric_toggle = BigParamControl("use metric units", "IsMetric")
