@@ -38,7 +38,7 @@ class DinoLayout(NavWidget):
     self._last_hotz_refresh = 0.0
     self._music = None
     self._audio_loaded = False
-    self._reset()
+    self._reset(restart_music=False)
 
   def show_event(self):
     super().show_event()
@@ -47,7 +47,7 @@ class DinoLayout(NavWidget):
 
   def hide_event(self):
     self._stop_music()
-    self._reset()
+    self._reset(restart_music=False)
     if self._on_hide is not None:
       self._on_hide()
     super().hide_event()
@@ -55,7 +55,7 @@ class DinoLayout(NavWidget):
   def set_on_hide_callback(self, callback: Callable[[], None] | None):
     self._on_hide = callback
 
-  def _reset(self):
+  def _reset(self, restart_music: bool = True):
     self._dead = False
     self._score = 0.0
     self._speed = 300.0
@@ -63,6 +63,8 @@ class DinoLayout(NavWidget):
     self._dino_vy = 0.0
     self._obstacles: list[dict[str, float]] = []
     self._spawn_timer = 0.8
+    if restart_music:
+      self._start_music()
 
   def _update_layout_rects(self):
     self._ui_scale = max(0.48, min(1.0, min(self._rect.width / 1920.0, self._rect.height / 1080.0)))
@@ -119,7 +121,7 @@ class DinoLayout(NavWidget):
   def _tick_audio(self):
     if self._audio_loaded and self._music is not None:
       rl.update_music_stream(self._music)
-      if not rl.is_music_stream_playing(self._music):
+      if not self._dead and not rl.is_music_stream_playing(self._music):
         rl.play_music_stream(self._music)
 
   def _start_music(self):
@@ -172,6 +174,7 @@ class DinoLayout(NavWidget):
         remaining.append(obstacle)
       if rl.check_collision_recs(dino_rect, obstacle_rect):
         self._dead = True
+        self._stop_music()
     self._obstacles = remaining
 
   def _jump(self):

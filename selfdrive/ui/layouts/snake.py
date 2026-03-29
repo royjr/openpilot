@@ -47,7 +47,7 @@ class SnakeLayout(NavWidget):
     self._cell_h = 0.0
     self._elapsed = 0.0
     self._tick_timer = 0.0
-    self._reset()
+    self._reset(restart_music=False)
 
   def show_event(self):
     super().show_event()
@@ -56,7 +56,7 @@ class SnakeLayout(NavWidget):
 
   def hide_event(self):
     self._stop_music()
-    self._reset()
+    self._reset(restart_music=False)
     if self._on_hide is not None:
       self._on_hide()
     super().hide_event()
@@ -64,7 +64,7 @@ class SnakeLayout(NavWidget):
   def set_on_hide_callback(self, callback: Callable[[], None] | None):
     self._on_hide = callback
 
-  def _reset(self):
+  def _reset(self, restart_music: bool = True):
     start_x = max(3, self._grid_cols // 2) if self._grid_cols else 8
     start_y = max(2, self._grid_rows // 2) if self._grid_rows else 13
     self._snake = [(start_x, start_y), (start_x - 1, start_y), (start_x - 2, start_y)]
@@ -77,6 +77,8 @@ class SnakeLayout(NavWidget):
     self._score = 0
     self._speed = 7.0
     self._spawn_food()
+    if restart_music:
+      self._start_music()
 
   def _update_layout_rects(self):
     self._ui_scale = max(0.48, min(1.0, min(self._rect.width / 1920.0, self._rect.height / 1080.0)))
@@ -171,7 +173,7 @@ class SnakeLayout(NavWidget):
   def _tick_audio(self):
     if self._audio_loaded and self._music is not None:
       rl.update_music_stream(self._music)
-      if not rl.is_music_stream_playing(self._music):
+      if not self._dead and not rl.is_music_stream_playing(self._music):
         rl.play_music_stream(self._music)
 
   def _start_music(self):
@@ -233,6 +235,7 @@ class SnakeLayout(NavWidget):
     new_head = ((head_x + self._direction[0]) % self._grid_cols, (head_y + self._direction[1]) % self._grid_rows)
     if new_head in self._snake[:-1]:
       self._dead = True
+      self._stop_music()
       return
 
     self._snake.insert(0, new_head)
