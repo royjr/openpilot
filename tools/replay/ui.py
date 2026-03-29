@@ -559,7 +559,7 @@ def ui_thread(addr, route_entries=None, playback="1.0", data_dir=None, prefix="u
         sm, logcan = connect_streams()
         vipc_client = VisionIpcClient("camerad", VisionStreamType.VISION_STREAM_ROAD, True)
 
-    if rl.is_key_released(rl.KeyboardKey.KEY_D):
+    if rl.is_key_released(rl.KeyboardKey.KEY_C):
       state_checks_enabled = not state_checks_enabled
 
     if rl.is_key_released(rl.KeyboardKey.KEY_H):
@@ -582,7 +582,7 @@ def ui_thread(addr, route_entries=None, playback="1.0", data_dir=None, prefix="u
         f"Playback: {current_playback:.1f}x" if route_entries else "",
         f"Radar state checks: {'ON' if state_checks_enabled else 'OFF'}",
         f"Radar heatmap: {RADAR_HEATMAP_MODES[radar_heatmap_mode_idx]}",
-        "Keys: SPACE play/pause, RIGHT next, LEFT prev, M +/-60s, S +/-10s, +/- speed, D state checks, H heatmap" if route_entries else "Keys: D state checks, H heatmap",
+        "Keys: SPACE play/pause, RIGHT next, LEFT prev, M +/-60s, S +/-10s, +/- speed, C checks, H heatmap" if route_entries else "Keys: C checks, H heatmap",
       ]
       draw_loading_overlay(font, loading_lines, camera_texture, top_down_texture, hor_mode, 80, 160)
       rl.end_drawing()
@@ -820,7 +820,7 @@ def ui_thread(addr, route_entries=None, playback="1.0", data_dir=None, prefix="u
       (f"OFFSET: {current_offset_seconds()}s" if route_entries else "", YELLOW),
       (f"PLAYBACK: {current_playback:.1f}x" if route_entries else "", YELLOW),
       (f"STATUS: {'PAUSED' if paused else 'PLAYING'}" if route_entries else "", YELLOW),
-      ("KEYS: SPACE play/pause, RIGHT next, LEFT prev, M +/-60s, S +/-10s, +/- speed, D state checks, H heatmap" if route_entries else "KEYS: D state checks, H heatmap", YELLOW),
+      ("KEYS: SPACE play/pause, RIGHT next, LEFT prev, M +/-60s, S +/-10s, +/- speed, C checks, H heatmap" if route_entries else "KEYS: C checks, H heatmap", YELLOW),
       ("ANGLE OFFSET (AVG): " + str(round(sm['liveParameters'].angleOffsetAverageDeg, 2)) + " deg", YELLOW),
       ("ANGLE OFFSET (INSTANT): " + str(round(sm['liveParameters'].angleOffsetDeg, 2)) + " deg", YELLOW),
       ("STIFFNESS: " + str(round(sm['liveParameters'].stiffnessFactor * 100.0, 2)) + " %", YELLOW),
