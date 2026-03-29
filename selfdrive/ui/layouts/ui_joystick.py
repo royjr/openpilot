@@ -71,6 +71,12 @@ class UIJoystickManager:
   def consume_primary(self) -> bool:
     return self._consume_any(("BTN_C"))
 
+  def consume_menu_down(self) -> bool:
+    return self._consume_any(("BTN_Z",))
+
+  def consume_menu_up(self) -> bool:
+    return self._consume_any(("BTN_WEST",))
+
   def consume_secondary(self) -> bool:
     return self._consume_any(("BTN_TR2",))
 
