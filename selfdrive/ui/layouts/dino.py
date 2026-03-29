@@ -14,9 +14,12 @@ JUMP_VELOCITY = -1200.0
 GROUND_MARGIN = 90.0
 LAYOUT_DIR = os.path.dirname(__file__)
 HOTZ_PATH = os.path.join(LAYOUT_DIR, "hotz.png")
+DINO_MUSIC_PATH = os.path.join(LAYOUT_DIR, "dino.mp3")
 GREEN = rl.Color(80, 170, 80, 255)
 WHITE = rl.Color(245, 245, 245, 255)
 BLACK = rl.Color(8, 8, 8, 255)
+
+_AUDIO_READY = False
 
 
 class DinoLayout(NavWidget):
@@ -30,9 +33,17 @@ class DinoLayout(NavWidget):
     self._hotz_texture = None
     self._hotz_mode = False
     self._last_hotz_refresh = 0.0
+    self._music = None
+    self._audio_loaded = False
     self._reset()
 
+  def show_event(self):
+    super().show_event()
+    self._ensure_audio_loaded()
+    self._start_music()
+
   def hide_event(self):
+    self._stop_music()
     self._reset()
     if self._on_hide is not None:
       self._on_hide()
@@ -71,6 +82,7 @@ class DinoLayout(NavWidget):
     self._refresh_hotz_mode()
     dt = max(1.0 / 120.0, min(1.0 / 20.0, rl.get_frame_time() or (1.0 / 60.0)))
     self._update_sim(dt)
+    self._tick_audio()
 
     rl.draw_rectangle_rec(rect, BLACK)
     self._draw_world()
@@ -89,6 +101,34 @@ class DinoLayout(NavWidget):
   def _ensure_hotz_texture(self):
     if self._hotz_texture is None and os.path.exists(HOTZ_PATH):
       self._hotz_texture = rl.load_texture(HOTZ_PATH)
+
+  def _ensure_audio_loaded(self):
+    global _AUDIO_READY
+    if self._audio_loaded:
+      return
+
+    if not _AUDIO_READY:
+      rl.init_audio_device()
+      _AUDIO_READY = True
+
+    self._music = rl.load_music_stream(DINO_MUSIC_PATH)
+    rl.set_music_volume(self._music, 0.55)
+    self._audio_loaded = True
+
+  def _tick_audio(self):
+    if self._audio_loaded and self._music is not None:
+      rl.update_music_stream(self._music)
+      if not rl.is_music_stream_playing(self._music):
+        rl.play_music_stream(self._music)
+
+  def _start_music(self):
+    if self._audio_loaded and self._music is not None:
+      rl.stop_music_stream(self._music)
+      rl.play_music_stream(self._music)
+
+  def _stop_music(self):
+    if self._audio_loaded and self._music is not None:
+      rl.stop_music_stream(self._music)
 
   def _update_sim(self, dt: float):
     if rl.is_key_pressed(rl.KeyboardKey.KEY_ESCAPE):
