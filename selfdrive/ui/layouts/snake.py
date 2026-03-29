@@ -6,6 +6,7 @@ from collections.abc import Callable
 import pyray as rl
 
 from openpilot.selfdrive.ui.layouts.game_audio import ensure_audio_device
+from openpilot.selfdrive.ui.layouts.ui_joystick import ui_joystick
 from openpilot.system.ui.lib.application import FontWeight, MouseEvent, MousePos, gui_app
 from openpilot.system.ui.lib.text_measure import measure_text_cached
 from openpilot.system.ui.widgets.nav_widget import NavWidget
@@ -185,6 +186,8 @@ class SnakeLayout(NavWidget):
   def _update_sim(self, dt: float):
     if rl.is_key_pressed(rl.KeyboardKey.KEY_ESCAPE):
       gui_app.pop_widget()
+    if ui_joystick.consume_secondary():
+      gui_app.pop_widget()
     if rl.is_key_pressed(rl.KeyboardKey.KEY_LEFT) or rl.is_key_pressed(rl.KeyboardKey.KEY_A):
       self._set_direction((-1, 0))
     if rl.is_key_pressed(rl.KeyboardKey.KEY_RIGHT) or rl.is_key_pressed(rl.KeyboardKey.KEY_D):
@@ -195,10 +198,19 @@ class SnakeLayout(NavWidget):
       self._set_direction((0, 1))
     if rl.is_key_pressed(rl.KeyboardKey.KEY_SPACE) and self._dead:
       self._reset()
+    if ui_joystick.consume_primary() and self._dead:
+      self._reset()
 
     touch_direction = self._get_virtual_pad_direction()
     if touch_direction is not None:
       self._set_direction(touch_direction)
+
+    joy_x, joy_y = ui_joystick.get_menu_axes()
+    if abs(joy_x) > 0.55 or abs(joy_y) > 0.55:
+      if abs(joy_x) > abs(joy_y):
+        self._set_direction((1, 0) if joy_x > 0 else (-1, 0))
+      else:
+        self._set_direction((0, 1) if joy_y > 0 else (0, -1))
 
     if self._dead:
       return

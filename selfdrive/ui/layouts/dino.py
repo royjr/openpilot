@@ -8,6 +8,7 @@ from openpilot.system.ui.lib.application import FontWeight, MousePos, gui_app
 from openpilot.system.ui.lib.text_measure import measure_text_cached
 from openpilot.system.ui.widgets.nav_widget import NavWidget
 from openpilot.selfdrive.ui.layouts.game_audio import ensure_audio_device
+from openpilot.selfdrive.ui.layouts.ui_joystick import ui_joystick
 from openpilot.selfdrive.ui.ui_state import ui_state
 
 GRAVITY = 2200.0
@@ -133,7 +134,14 @@ class DinoLayout(NavWidget):
   def _update_sim(self, dt: float):
     if rl.is_key_pressed(rl.KeyboardKey.KEY_ESCAPE):
       gui_app.pop_widget()
+    if ui_joystick.consume_secondary():
+      gui_app.pop_widget()
     if rl.is_key_pressed(rl.KeyboardKey.KEY_SPACE) or rl.is_key_pressed(rl.KeyboardKey.KEY_UP):
+      if self._dead:
+        self._reset()
+      else:
+        self._jump()
+    if ui_joystick.consume_primary():
       if self._dead:
         self._reset()
       else:

@@ -3,6 +3,7 @@ import cereal.messaging as messaging
 from openpilot.selfdrive.ui.layouts.doom import DoomLayout
 from openpilot.selfdrive.ui.layouts.dino import DinoLayout
 from openpilot.selfdrive.ui.layouts.snake import SnakeLayout
+from openpilot.selfdrive.ui.layouts.ui_joystick import ui_joystick
 from openpilot.selfdrive.ui.mici.layouts.home import MiciHomeLayout
 from openpilot.selfdrive.ui.mici.layouts.settings.settings import SettingsLayout
 from openpilot.selfdrive.ui.mici.layouts.offroad_alerts import MiciOffroadAlerts
@@ -28,6 +29,8 @@ class MiciMainLayout(Scroller):
     self._onroad_time_delay: float | None = None
     self._setup = False
     self._games_scroll_lock_until = 0.0
+    self._joystick_next_x = 0.0
+    self._joystick_next_y = 0.0
 
     # Initialize widgets
     self._home_layout = MiciHomeLayout()
@@ -65,6 +68,7 @@ class MiciMainLayout(Scroller):
 
     # Set callbacks
     self._setup_callbacks()
+    ui_joystick.start()
 
     gui_app.add_nav_stack_tick(self._handle_transitions)
     gui_app.push_widget(self)
@@ -101,6 +105,8 @@ class MiciMainLayout(Scroller):
     self._scroll_to_games(self._home_layout)
 
   def _render(self, _):
+    self._update_joystick()
+
     if not self._setup:
       if self._alerts_layout.active_alerts() > 0:
         self._scroller.scroll_to(self._alerts_layout.rect.x)
@@ -111,6 +117,53 @@ class MiciMainLayout(Scroller):
 
     # Render
     super()._render(self._rect)
+
+  def _outer_pages(self) -> list[Widget]:
+    return [self._alerts_layout, self._games_layout, self._onroad_layout]
+
+  def _current_outer_page_idx(self) -> int:
+    current_pos = -self._scroller._scroller.scroll_panel.get_offset()
+    pages = self._outer_pages()
+    return min(range(len(pages)), key=lambda i: abs(pages[i].rect.x - current_pos))
+
+  def _update_joystick(self):
+    active_widget = gui_app.get_active_widget()
+    if gui_app.widget_in_stack(self._onboarding_window):
+      return
+
+    if active_widget == self:
+      self._handle_menu_joystick()
+      return
+
+    if active_widget == self._settings_layout and ui_joystick.consume_secondary():
+      gui_app.pop_widget()
+
+  def _handle_menu_joystick(self):
+    now = rl.get_time()
+    menu_x, menu_y = ui_joystick.get_menu_axes()
+
+    if abs(menu_x) >= 0.55 and now >= self._joystick_next_x:
+      direction = 1 if menu_x > 0 else -1
+      idx = self._current_outer_page_idx()
+      next_idx = max(0, min(len(self._outer_pages()) - 1, idx + direction))
+      if next_idx != idx:
+        self._scroll_outer_to(self._outer_pages()[next_idx])
+      self._joystick_next_x = now + 0.18
+    elif abs(menu_x) < 0.3:
+      self._joystick_next_x = 0.0
+
+    if abs(menu_y) >= 0.55 and now >= self._joystick_next_y and self._current_outer_page_idx() == 1:
+      self._home_layout.cycle_selected_game(1 if menu_y < 0 else -1)
+      self._joystick_next_y = now + 0.18
+    elif abs(menu_y) < 0.3:
+      self._joystick_next_y = 0.0
+
+    if ui_joystick.consume_primary() and self._current_outer_page_idx() == 1:
+      self._home_layout.launch_selected_game()
+
+    if ui_joystick.consume_secondary():
+      if self._current_outer_page_idx() == 1:
+        self._scroll_outer_to(self._games_layout)
 
   def _handle_transitions(self):
     # Don't pop if onboarding

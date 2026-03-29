@@ -196,6 +196,12 @@ class MiciHomeLayout(Widget):
     if callback is not None:
       callback()
 
+  def cycle_selected_game(self, delta: int):
+    self._set_selected_game(self._selected_game_idx + delta)
+
+  def launch_selected_game(self):
+    self._launch_selected_game()
+
   def _with_alpha(self, color, alpha: int) -> rl.Color:
     if hasattr(color, "r"):
       return rl.Color(color.r, color.g, color.b, alpha)

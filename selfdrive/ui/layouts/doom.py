@@ -1,7 +1,5 @@
 import math
 import os
-import threading
-import time
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -10,15 +8,9 @@ import pyray as rl
 from openpilot.system.ui.lib.application import FontWeight, MouseEvent, MousePos, gui_app
 from openpilot.system.ui.lib.text_measure import measure_text_cached
 from openpilot.system.ui.widgets.nav_widget import NavWidget
-from openpilot.system.hardware import HARDWARE, PC
 from openpilot.selfdrive.ui.layouts.game_audio import ensure_audio_device
+from openpilot.selfdrive.ui.layouts.ui_joystick import ui_joystick
 from openpilot.selfdrive.ui.ui_state import ui_state
-
-try:
-  from inputs import UnpluggedError, get_gamepad
-except ImportError:
-  UnpluggedError = OSError
-  get_gamepad = None
 
 FOV = math.radians(70.0)
 MAX_RAY_DIST = 20.0
@@ -55,111 +47,6 @@ class Enemy:
   y: float
   alive: bool = True
 
-
-class DoomJoystick:
-  def __init__(self):
-    self.enabled = get_gamepad is not None
-    self._lock = threading.Lock()
-    self._running = False
-    self._thread = None
-    self.connected = False
-    self._last_debug_values: dict[str, int] = {}
-    self._debug_order: list[str] = []
-    self.move = 0.0
-    self.turn = 0.0
-    self.fire_pressed = False
-    self.restart_pressed = False
-
-    # if HARDWARE.get_device_type() == "pc":
-    #   self._move_axis = "ABS_Z"
-    #   self._turn_axis = "ABS_RX"
-    #   self._flip_map = {"ABS_RZ": self._move_axis}
-    # else:
-    self._move_axis = "ABS_Y"
-    self._turn_axis = "ABS_Z"
-    self._flip_map = {"ABS_RY": self._move_axis}
-
-    self._min_axis_value = {self._move_axis: 0.0, self._turn_axis: 0.0}
-    self._max_axis_value = {self._move_axis: 255.0, self._turn_axis: 255.0}
-    self._axes_values = {self._move_axis: 0.0, self._turn_axis: 0.0}
-
-  def start(self):
-    if not self.enabled or self._running:
-      return
-    self._running = True
-    self._thread = threading.Thread(target=self._poll_loop, daemon=True)
-    self._thread.start()
-
-  def stop(self):
-    self._running = False
-
-  def consume_actions(self) -> tuple[bool, bool]:
-    with self._lock:
-      fire = self.fire_pressed
-      restart = self.restart_pressed
-      self.fire_pressed = False
-      self.restart_pressed = False
-      return fire, restart
-
-  def get_axes(self) -> tuple[float, float]:
-    with self._lock:
-      return self.move, self.turn
-
-  def _poll_loop(self):
-    while self._running:
-      try:
-        events = get_gamepad()
-      except (OSError, UnpluggedError):
-        with self._lock:
-          self.connected = False
-          self.move = 0.0
-          self.turn = 0.0
-        time.sleep(0.1)
-        continue
-
-      with self._lock:
-        self.connected = True
-      for joystick_event in events:
-        self._handle_event(joystick_event.code, joystick_event.state)
-
-  def _handle_event(self, code: str, state: int):
-    self._debug_event(code, state)
-
-    if code in self._flip_map:
-      code = self._flip_map[code]
-      state = -state
-
-    with self._lock:
-      if code == "BTN_WEST" or code == "BTN_Z" and state == 1:
-        self.fire_pressed = True
-      elif code == "BTN_TL2" or code == "BTN_TR2" and state == 1:
-        self.restart_pressed = True
-      elif code in self._axes_values:
-        self._max_axis_value[code] = max(state, self._max_axis_value[code])
-        self._min_axis_value[code] = min(state, self._min_axis_value[code])
-        low = self._min_axis_value[code]
-        high = self._max_axis_value[code]
-        if high == low:
-          norm = 0.0
-        else:
-          norm = -float((2.0 * (state - low) / (high - low)) - 1.0)
-        norm = norm if abs(norm) > 0.05 else 0.0
-        expo = 0.4
-        self._axes_values[code] = expo * norm ** 3 + (1 - expo) * norm
-        self.move = self._axes_values[self._move_axis]
-        self.turn = -self._axes_values[self._turn_axis]
-
-  def _debug_event(self, code: str, state: int):
-    prev = self._last_debug_values.get(code)
-    if prev == state:
-      return
-    if code not in self._last_debug_values:
-      self._debug_order.append(code)
-    self._last_debug_values[code] = state
-    parts = [f"{name}={self._last_debug_values[name]}" for name in self._debug_order]
-    print("[doom joystick] " + " ".join(parts), flush=True)
-
-
 class DoomLayout(NavWidget):
   BACK_TOUCH_AREA_PERCENTAGE = 0.08
 
@@ -186,7 +73,6 @@ class DoomLayout(NavWidget):
     self._message_time = 0.0
     self._ui_scale = 1.0
     self._performance_mode = True
-    self._joystick = DoomJoystick()
     self._touch_origin: list[MousePos | None] = [None, None]
     self._touch_current: list[MousePos | None] = [None, None]
     self._touch_dragged: list[bool] = [False, False]
@@ -198,13 +84,11 @@ class DoomLayout(NavWidget):
     self._refresh_hotz_mode(force=True)
     self._ensure_audio_loaded()
     self._ensure_hotz_texture()
-    self._joystick.start()
     self._start_music()
 
   def hide_event(self):
     self._stop_music()
     self._reset(restart_music=False)
-    self._joystick.stop()
     if self._on_hide is not None:
       self._on_hide()
     super().hide_event()
@@ -334,11 +218,14 @@ class DoomLayout(NavWidget):
     move_dir += touch_move
     turn_dir += touch_turn
 
-    joy_move, joy_turn = self._joystick.get_axes()
+    joy_move, joy_turn = ui_joystick.get_game_axes()
     move_dir += joy_move
     turn_dir += joy_turn
 
-    joy_fire, joy_restart = self._joystick.consume_actions()
+    joy_fire = ui_joystick.consume_primary() or ui_joystick.consume_alt_fire()
+    joy_restart = ui_joystick.consume_restart()
+    if ui_joystick.consume_secondary():
+      gui_app.pop_widget()
     if joy_restart:
       self._reset()
     elif joy_fire:
@@ -547,9 +434,9 @@ class DoomLayout(NavWidget):
     rl.draw_text_ex(self._hud_font, joy_text, rl.Vector2(self._hud_rect.x + 30 * self._ui_scale, self._hud_rect.y + self._hud_rect.height - 28 * self._ui_scale), joy_font, 0, joy_color)
 
   def _joystick_status_text(self) -> str:
-    if not self._joystick.enabled:
+    if not ui_joystick.enabled:
       return "PAD OFF"
-    return "PAD ON" if self._joystick.connected else "PAD WAIT"
+    return "PAD ON" if ui_joystick.connected else "PAD WAIT"
 
   def _get_virtual_pad_input(self) -> tuple[float, float]:
     for slot in range(len(self._touch_origin)):
