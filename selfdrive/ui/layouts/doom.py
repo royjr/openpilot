@@ -48,7 +48,7 @@ class Enemy:
   alive: bool = True
 
 class DoomLayout(NavWidget):
-  BACK_TOUCH_AREA_PERCENTAGE = 0.08
+  BACK_TOUCH_AREA_PERCENTAGE = 0.1
 
   def __init__(self):
     super().__init__()
