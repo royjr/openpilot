@@ -7,6 +7,7 @@ import socket
 import subprocess
 import threading
 import time
+from pathlib import Path
 
 
 HTML = """<!doctype html>
@@ -174,21 +175,6 @@ def adb_screencap(serial: str | None) -> bytes:
   return subprocess.check_output(cmd)
 
 
-def ssh_screencap(target: str, port: int, remote_cmd: str) -> bytes:
-  cmd = [
-    "ssh",
-    "-p",
-    str(port),
-    "-o",
-    "BatchMode=yes",
-    "-o",
-    "ConnectTimeout=5",
-    target,
-    remote_cmd,
-  ]
-  return subprocess.check_output(cmd)
-
-
 def main():
   parser = argparse.ArgumentParser(description="Stream c4 UI to a browser over websockets")
   parser.add_argument("--host", default="0.0.0.0")
@@ -196,9 +182,6 @@ def main():
   parser.add_argument("--ws-port", type=int, default=8766)
   parser.add_argument("--fps", type=float, default=5.0)
   parser.add_argument("--serial", default=None, help="adb serial if multiple devices are connected")
-  parser.add_argument("--ssh", default=None, help="ssh target like comma@192.168.63.208")
-  parser.add_argument("--ssh-port", type=int, default=22)
-  parser.add_argument("--ssh-cmd", default="screencap -p", help="remote screenshot command")
   args = parser.parse_args()
 
   ws = WebSocketBroadcaster(args.host, args.ws_port)
@@ -208,26 +191,17 @@ def main():
   http_thread = threading.Thread(target=httpd.serve_forever, daemon=True)
   http_thread.start()
   print(f"[c4-ui-ws] page listening on http://{args.host}:{args.http_port}", flush=True)
-  if args.ssh:
-    print(f"[c4-ui-ws] capture mode: ssh {args.ssh}:{args.ssh_port} cmd={args.ssh_cmd!r}", flush=True)
-  else:
-    print(f"[c4-ui-ws] capture mode: adb serial={args.serial or 'default'}", flush=True)
 
   period = 1.0 / max(args.fps, 0.5)
   while True:
     started = time.monotonic()
     try:
-      if args.ssh:
-        frame = ssh_screencap(args.ssh, args.ssh_port, args.ssh_cmd)
-      else:
-        frame = adb_screencap(args.serial)
+      frame = adb_screencap(args.serial)
       ws.broadcast_text(base64.b64encode(frame).decode("ascii"))
     except subprocess.CalledProcessError as err:
-      mode = "ssh" if args.ssh else "adb"
-      print(f"[c4-ui-ws] {mode} screencap failed: {err}", flush=True)
+      print(f"[c4-ui-ws] adb screencap failed: {err}", flush=True)
     except FileNotFoundError:
-      tool = "ssh" if args.ssh else "adb"
-      print(f"[c4-ui-ws] {tool} not found in PATH", flush=True)
+      print("[c4-ui-ws] adb not found in PATH", flush=True)
       break
     elapsed = time.monotonic() - started
     time.sleep(max(0.0, period - elapsed))
