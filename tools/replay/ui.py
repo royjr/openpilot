@@ -61,6 +61,10 @@ TOP_DOWN_DRAW_WIDTH = 384
 PLOT_DRAW_WIDTH = 480
 PLOT_DRAW_HEIGHT = 480
 RADAR_HEATMAP_MODES = ("OFF", "TOP", "CAMERA", "BOTH")
+CYAN = (90, 235, 255)
+AMBER = (255, 210, 90)
+SOFT_WHITE = (235, 235, 235)
+SLATE = (140, 180, 210)
 
 
 @dataclass
@@ -821,26 +825,31 @@ def ui_thread(addr, route_entries=None, playback="1.0", data_dir=None, prefix="u
     SPACING = 20
     lines = [
       ("ENABLED", GREEN if sm['selfdriveState'].enabled else BLACK),
-      ("SPEED: " + str(round(sm['carState'].vEgo, 1)) + " m/s", YELLOW),
-      ("LONG CONTROL STATE: " + str(sm['controlsState'].longControlState), YELLOW),
-      ("LONG MPC SOURCE: " + str(sm['longitudinalPlan'].longitudinalPlanSource), YELLOW),
-      (f"RADAR FORMAT: {active_radar_format_name or 'NONE'}", YELLOW),
-      (f"RADAR CAN MSGS: {can_range_msg_count}", YELLOW),
+      ("SPEED: " + str(round(sm['carState'].vEgo, 1)) + " m/s", CYAN),
+      ("LONG CONTROL STATE: " + str(sm['controlsState'].longControlState), CYAN),
+      ("LONG MPC SOURCE: " + str(sm['longitudinalPlan'].longitudinalPlanSource), CYAN),
+      (f"RADAR FORMAT: {active_radar_format_name or 'NONE'}", AMBER),
+      (f"RADAR CAN MSGS: {can_range_msg_count}", AMBER),
       (f"RADAR TRACKS: {len(active_radar_tracks)}"
        + (f" (BUS {','.join(str(bus) for bus in active_radar_buses)})" if active_radar_buses else ""),
-       YELLOW),
-      (f"RADAR STATE CHECKS: {'ON' if state_checks_enabled else 'OFF'}", YELLOW),
-      (f"RADAR HEATMAP: {RADAR_HEATMAP_MODES[radar_heatmap_mode_idx]}", YELLOW),
-      (f"ROUTE: {current_route_name}" if current_route_name is not None else "", YELLOW),
-      (f"PLATFORM: {current_route_model}" if current_route_model is not None else "", YELLOW),
-      (f"OFFSET: {current_offset_seconds()}s" if route_entries else "", YELLOW),
-      (f"PLAYBACK: {current_playback:.1f}x" if route_entries else "", YELLOW),
-      (f"STATUS: {'PAUSED' if paused else 'PLAYING'}" if route_entries else "", YELLOW),
-      ("ANGLE OFFSET (AVG): " + str(round(sm['liveParameters'].angleOffsetAverageDeg, 2)) + " deg", YELLOW),
-      ("ANGLE OFFSET (INSTANT): " + str(round(sm['liveParameters'].angleOffsetDeg, 2)) + " deg", YELLOW),
-      ("STIFFNESS: " + str(round(sm['liveParameters'].stiffnessFactor * 100.0, 2)) + " %", YELLOW),
-      ("STEER RATIO: " + str(round(sm['liveParameters'].steerRatio, 2)), YELLOW),
+       AMBER),
+      (f"RADAR STATE CHECKS: {'ON' if state_checks_enabled else 'OFF'}", AMBER),
+      (f"RADAR HEATMAP: {RADAR_HEATMAP_MODES[radar_heatmap_mode_idx]}", AMBER),
+      (f"ROUTE: {current_route_name}" if current_route_name is not None else "", SLATE),
+      (f"PLATFORM: {current_route_model}" if current_route_model is not None else "", SLATE),
+      (f"OFFSET: {current_offset_seconds()}s" if route_entries else "", SOFT_WHITE),
+      (f"PLAYBACK: {current_playback:.1f}x" if route_entries else "", SOFT_WHITE),
+      (f"STATUS: {'PAUSED' if paused else 'PLAYING'}" if route_entries else "", SOFT_WHITE),
+      ("ANGLE OFFSET (AVG): " + str(round(sm['liveParameters'].angleOffsetAverageDeg, 2)) + " deg", SOFT_WHITE),
+      ("ANGLE OFFSET (INSTANT): " + str(round(sm['liveParameters'].angleOffsetDeg, 2)) + " deg", SOFT_WHITE),
+      ("STIFFNESS: " + str(round(sm['liveParameters'].stiffnessFactor * 100.0, 2)) + " %", SOFT_WHITE),
+      ("STEER RATIO: " + str(round(sm['liveParameters'].steerRatio, 2)), SOFT_WHITE),
     ]
+
+    hud_height = len(lines) * SPACING + 18
+    rl.draw_rectangle(write_x - 10, write_y - 12, 560, hud_height, rl.Color(8, 12, 18, 155))
+    rl.draw_rectangle(write_x - 10, write_y - 12, 4, hud_height, rl.Color(90, 235, 255, 255))
+    rl.draw_rectangle_lines(write_x - 10, write_y - 12, 560, hud_height, rl.Color(90, 235, 255, 80))
 
     for i, line in enumerate(lines):
       if line is not None:
