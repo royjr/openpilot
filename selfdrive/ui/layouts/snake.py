@@ -1,3 +1,4 @@
+import math
 import os
 import random
 from collections.abc import Callable
@@ -5,7 +6,7 @@ from collections.abc import Callable
 import pyray as rl
 
 from openpilot.selfdrive.ui.layouts.game_audio import ensure_audio_device
-from openpilot.system.ui.lib.application import FontWeight, MousePos, gui_app
+from openpilot.system.ui.lib.application import FontWeight, MouseEvent, MousePos, gui_app
 from openpilot.system.ui.lib.text_measure import measure_text_cached
 from openpilot.system.ui.widgets.nav_widget import NavWidget
 from openpilot.selfdrive.ui.ui_state import ui_state
@@ -13,6 +14,8 @@ from openpilot.selfdrive.ui.ui_state import ui_state
 PURPLE = rl.Color(176, 96, 255, 255)
 WHITE = rl.Color(245, 245, 245, 255)
 BLACK = rl.Color(8, 8, 8, 255)
+VIRTUAL_PAD_DEADZONE = 18.0
+VIRTUAL_PAD_MAX_RADIUS = 120.0
 LAYOUT_DIR = os.path.dirname(__file__)
 HOTZ_PATH = os.path.join(LAYOUT_DIR, "hotz.png")
 SNAKE_MUSIC_PATH = os.path.join(LAYOUT_DIR, "snake.mp3")
@@ -32,6 +35,9 @@ class SnakeLayout(NavWidget):
     self._last_hotz_refresh = 0.0
     self._music = None
     self._audio_loaded = False
+    self._touch_origin: list[MousePos | None] = [None, None]
+    self._touch_current: list[MousePos | None] = [None, None]
+    self._touch_dragged: list[bool] = [False, False]
     self._grid_cols = 0
     self._grid_rows = 0
     self._cell_w = 0.0
@@ -84,21 +90,50 @@ class SnakeLayout(NavWidget):
     if old_cols != self._grid_cols or old_rows != self._grid_rows:
       self._reset()
 
+  def _handle_mouse_event(self, mouse_event: MouseEvent) -> None:
+    super()._handle_mouse_event(mouse_event)
+
+    if mouse_event.slot >= len(self._touch_origin):
+      return
+
+    if mouse_event.left_pressed and rl.check_collision_point_rec(mouse_event.pos, self._view_rect):
+      self._touch_origin[mouse_event.slot] = mouse_event.pos
+      self._touch_current[mouse_event.slot] = mouse_event.pos
+      self._touch_dragged[mouse_event.slot] = False
+    elif mouse_event.left_down and self._touch_origin[mouse_event.slot] is not None:
+      self._touch_current[mouse_event.slot] = mouse_event.pos
+      drag = math.hypot(mouse_event.pos.x - self._touch_origin[mouse_event.slot].x,
+                        mouse_event.pos.y - self._touch_origin[mouse_event.slot].y)
+      if drag > VIRTUAL_PAD_DEADZONE * self._ui_scale:
+        self._touch_dragged[mouse_event.slot] = True
+    elif mouse_event.left_released:
+      self._touch_current[mouse_event.slot] = mouse_event.pos
+
   def _handle_mouse_release(self, mouse_pos: MousePos):
     super()._handle_mouse_release(mouse_pos)
+    release_slot = next((i for i, origin in enumerate(self._touch_origin) if origin is not None), None)
+    was_drag = False if release_slot is None else self._touch_dragged[release_slot]
     if not rl.check_collision_point_rec(mouse_pos, self._view_rect):
+      if release_slot is not None:
+        self._touch_origin[release_slot] = None
+        self._touch_current[release_slot] = None
+        self._touch_dragged[release_slot] = False
       return
     if self._dead:
       self._reset()
-      return
+    elif not was_drag:
+      center = rl.Vector2(self._view_rect.x + self._view_rect.width / 2, self._view_rect.y + self._view_rect.height / 2)
+      dx = mouse_pos.x - center.x
+      dy = mouse_pos.y - center.y
+      if abs(dx) > abs(dy):
+        self._set_direction((1, 0) if dx > 0 else (-1, 0))
+      else:
+        self._set_direction((0, 1) if dy > 0 else (0, -1))
 
-    center = rl.Vector2(self._view_rect.x + self._view_rect.width / 2, self._view_rect.y + self._view_rect.height / 2)
-    dx = mouse_pos.x - center.x
-    dy = mouse_pos.y - center.y
-    if abs(dx) > abs(dy):
-      self._set_direction((1, 0) if dx > 0 else (-1, 0))
-    else:
-      self._set_direction((0, 1) if dy > 0 else (0, -1))
+    if release_slot is not None:
+      self._touch_origin[release_slot] = None
+      self._touch_current[release_slot] = None
+      self._touch_dragged[release_slot] = False
 
   def _render(self, rect: rl.Rectangle):
     self._refresh_hotz_mode()
@@ -109,6 +144,7 @@ class SnakeLayout(NavWidget):
     rl.draw_rectangle_rec(rect, BLACK)
     self._draw_world()
     self._draw_hud()
+    self._draw_virtual_pad()
     if self._dead:
       self._draw_game_over()
 
@@ -158,6 +194,10 @@ class SnakeLayout(NavWidget):
     if rl.is_key_pressed(rl.KeyboardKey.KEY_SPACE) and self._dead:
       self._reset()
 
+    touch_direction = self._get_virtual_pad_direction()
+    if touch_direction is not None:
+      self._set_direction(touch_direction)
+
     if self._dead:
       return
 
@@ -192,6 +232,25 @@ class SnakeLayout(NavWidget):
   def _spawn_food(self):
     open_cells = [(x, y) for x in range(self._grid_cols) for y in range(self._grid_rows) if (x, y) not in self._snake]
     self._food = random.choice(open_cells) if open_cells else self._food
+
+  def _get_virtual_pad_direction(self) -> tuple[int, int] | None:
+    for slot in range(len(self._touch_origin)):
+      origin = self._touch_origin[slot]
+      current = self._touch_current[slot]
+      if origin is None or current is None:
+        continue
+
+      dx = current.x - origin.x
+      dy = current.y - origin.y
+      dist = math.hypot(dx, dy)
+      if dist < VIRTUAL_PAD_DEADZONE * self._ui_scale:
+        continue
+
+      if abs(dx) > abs(dy):
+        return (1, 0) if dx > 0 else (-1, 0)
+      return (0, 1) if dy > 0 else (0, -1)
+
+    return None
 
   def _cell_rect(self, cell: tuple[int, int]) -> rl.Rectangle:
     grid_w = self._grid_cols * self._cell_w
@@ -250,6 +309,29 @@ class SnakeLayout(NavWidget):
     rl.draw_text_ex(self._hud_font, time_text,
                     rl.Vector2(self._hud_rect.x + self._hud_rect.width - time_size.x - 30 * self._ui_scale, self._hud_rect.y + self._hud_rect.height - 28 * self._ui_scale),
                     sub_font, 0, rl.Color(214, 180, 255, 255))
+
+  def _draw_virtual_pad(self):
+    for slot in range(len(self._touch_origin)):
+      origin = self._touch_origin[slot]
+      current = self._touch_current[slot]
+      if origin is None or current is None:
+        continue
+
+      radius = VIRTUAL_PAD_MAX_RADIUS * self._ui_scale
+      knob_radius = 34 * self._ui_scale
+      dx = current.x - origin.x
+      dy = current.y - origin.y
+      dist = math.hypot(dx, dy)
+      if dist > radius and dist > 0:
+        dx *= radius / dist
+        dy *= radius / dist
+
+      base_color = rl.Color(255, 255, 255, 36)
+      edge_color = rl.Color(214, 180, 255, 96)
+      knob_color = rl.Color(176, 96, 255, 190)
+      rl.draw_circle(int(origin.x), int(origin.y), radius, base_color)
+      rl.draw_circle_lines(int(origin.x), int(origin.y), radius, edge_color)
+      rl.draw_circle(int(origin.x + dx), int(origin.y + dy), knob_radius, knob_color)
 
   def _draw_game_over(self):
     text = "TAP TO SLITHER AGAIN"
