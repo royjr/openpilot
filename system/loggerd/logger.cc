@@ -200,3 +200,8 @@ void LoggerState::write(uint8_t* data, size_t size, bool in_qlog) {
   rlog->write(data, size);
   if (in_qlog) qlog->write(data, size);
 }
+
+void LoggerState::flush() {
+  if (rlog) rlog->flush();
+  if (qlog) qlog->flush();
+}

@@ -15,6 +15,7 @@ public:
   VideoWriter(const char *path, const char *filename, bool remuxing, int width, int height, int fps, cereal::EncodeIndex::Type codec);
   void write(uint8_t *data, int len, long long timestamp, bool codecconfig, bool keyframe);
   void write_audio(uint8_t *data, int len, long long timestamp, int sample_rate);
+  void flush();
 
   ~VideoWriter();
 

@@ -2,8 +2,30 @@
 #include "system/loggerd/zstd_writer.h"
 
 #include <cassert>
+#include <unistd.h>
 
+#include "common/swaglog.h"
 #include "common/util.h"
+
+namespace {
+
+void sync_file(FILE *file) {
+  if (file == nullptr) return;
+
+  int fd = fileno(file);
+  if (fd < 0) return;
+
+#ifdef __APPLE__
+  int err = fsync(fd);
+#else
+  int err = fdatasync(fd);
+#endif
+  if (err != 0) {
+    LOGW("failed to sync logger file: %d", errno);
+  }
+}
+
+}  // namespace
 
 // Constructor: Initializes compression stream and opens file
 ZstdFileWriter::ZstdFileWriter(const std::string& filename, int compression_level) {
@@ -24,7 +46,7 @@ ZstdFileWriter::ZstdFileWriter(const std::string& filename, int compression_leve
 
 // Destructor: Finalizes compression and closes file
 ZstdFileWriter::~ZstdFileWriter() {
-  flushCache(true);
+  flushCache(ZSTD_e_end);
   util::safe_fflush(file_);
 
   int err = fclose(file_);
@@ -40,14 +62,19 @@ void ZstdFileWriter::write(void* data, size_t size) {
 
   // If the cache is full, compress and write to the file
   if (input_cache_.size() >= input_cache_capacity_) {
-    flushCache(false);
+    flushCache(ZSTD_e_continue);
   }
 }
 
+void ZstdFileWriter::flush() {
+  flushCache(ZSTD_e_flush);
+  util::safe_fflush(file_);
+  sync_file(file_);
+}
+
 // Compress and flush the input cache to the file
-void ZstdFileWriter::flushCache(bool last_chunk) {
+void ZstdFileWriter::flushCache(ZSTD_EndDirective mode) {
   ZSTD_inBuffer input = {input_cache_.data(), input_cache_.size(), 0};
-  ZSTD_EndDirective mode = !last_chunk ? ZSTD_e_continue : ZSTD_e_end;
   int finished = 0;
 
   do {
@@ -58,7 +85,7 @@ void ZstdFileWriter::flushCache(bool last_chunk) {
     size_t written = util::safe_fwrite(output_buffer_.data(), 1, output.pos, file_);
     assert(written == output.pos);
 
-    finished = last_chunk ? (remaining == 0) : (input.pos == input.size);
+    finished = (mode == ZSTD_e_end) ? (remaining == 0) : (input.pos == input.size && remaining == 0);
   } while (!finished);
 
   input_cache_.clear();  // Clear cache after compression

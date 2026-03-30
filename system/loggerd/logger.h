@@ -19,6 +19,7 @@ public:
   ~LoggerState();
   bool next();
   void write(uint8_t* data, size_t size, bool in_qlog);
+  void flush();
   inline int segment() const { return part; }
   inline const std::string& segmentPath() const { return segment_path; }
   inline const std::string& routeName() const { return route_name; }

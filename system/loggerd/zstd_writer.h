@@ -11,10 +11,11 @@ public:
   ZstdFileWriter(const std::string &filename, int compression_level);
   ~ZstdFileWriter();
   void write(void* data, size_t size);
+  void flush();
   inline void write(kj::ArrayPtr<capnp::byte> array) { write(array.begin(), array.size()); }
 
 private:
-  void flushCache(bool last_chunk);
+  void flushCache(ZSTD_EndDirective mode);
 
   size_t input_cache_capacity_ = 0;
   std::vector<char> input_cache_;

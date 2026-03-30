@@ -1,8 +1,29 @@
 #include <cassert>
+#include <unistd.h>
 
 #include "system/loggerd/video_writer.h"
 #include "common/swaglog.h"
 #include "common/util.h"
+
+namespace {
+
+void sync_file(FILE *file) {
+  if (file == nullptr) return;
+
+  int fd = fileno(file);
+  if (fd < 0) return;
+
+#ifdef __APPLE__
+  int err = fsync(fd);
+#else
+  int err = fdatasync(fd);
+#endif
+  if (err != 0) {
+    LOGW("failed to sync video file: %d", errno);
+  }
+}
+
+}  // namespace
 
 VideoWriter::VideoWriter(const char *path, const char *filename, bool remuxing, int width, int height, int fps, cereal::EncodeIndex::Type codec)
   : remuxing(remuxing) {
@@ -208,6 +229,17 @@ void VideoWriter::process_remaining_audio() {
     float *f_samples = reinterpret_cast<float *>(audio_frame->data[0]);
     std::copy(audio_buffer.begin(), audio_buffer.end(), f_samples);
     encode_and_write_audio_frame(audio_frame);
+  }
+}
+
+void VideoWriter::flush() {
+  if (remuxing) {
+    if (ofmt_ctx && ofmt_ctx->pb) {
+      avio_flush(ofmt_ctx->pb);
+    }
+  } else if (of) {
+    util::safe_fflush(of);
+    sync_file(of);
   }
 }
 

@@ -19,6 +19,7 @@ struct LoggerdState {
   std::atomic<int> ready_to_rotate{0};  // count of encoders ready to rotate
   int max_waiting = 0;
   double last_rotate_tms = 0.;      // last rotate time in ms
+  double last_checkpoint_tms = 0.;  // last forced flush time in ms
 };
 
 void logger_rotate(LoggerdState *s) {
@@ -26,6 +27,7 @@ void logger_rotate(LoggerdState *s) {
   assert(ret);
   s->ready_to_rotate = 0;
   s->last_rotate_tms = millis_since_boot();
+  s->last_checkpoint_tms = s->last_rotate_tms;
   LOGW((s->logger.segment() == 0) ? "logging to %s" : "rotated to %s", s->logger.segmentPath().c_str());
 }
 
@@ -217,6 +219,21 @@ void handle_preserve_segment(LoggerdState *s) {
   prev_segment = s->logger.segment();
 }
 
+void checkpoint_segment(LoggerdState *s, std::unordered_map<SubSocket*, struct RemoteEncoder> &remote_encoders) {
+  constexpr double CHECKPOINT_INTERVAL_MS = 1000.0;
+
+  double tms = millis_since_boot();
+  if ((tms - s->last_checkpoint_tms) < CHECKPOINT_INTERVAL_MS) return;
+
+  s->logger.flush();
+  for (auto &[_, encoder] : remote_encoders) {
+    if (encoder.writer) {
+      encoder.writer->flush();
+    }
+  }
+  s->last_checkpoint_tms = tms;
+}
+
 void loggerd_thread() {
   // setup messaging
   struct ServiceState {
@@ -314,6 +331,7 @@ void loggerd_thread() {
         }
 
         rotate_if_needed(&s);
+        checkpoint_segment(&s, remote_encoders);
 
         if ((++msg_count % 10000) == 0) {
           double seconds = (millis_since_boot() - start_ts) / 1000.0;
