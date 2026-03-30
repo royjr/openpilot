@@ -220,7 +220,7 @@ void handle_preserve_segment(LoggerdState *s) {
 }
 
 void checkpoint_segment(LoggerdState *s, std::unordered_map<SubSocket*, struct RemoteEncoder> &remote_encoders) {
-  constexpr double CHECKPOINT_INTERVAL_MS = 1000.0;
+  constexpr double CHECKPOINT_INTERVAL_MS = 100.0;
 
   double tms = millis_since_boot();
   if ((tms - s->last_checkpoint_tms) < CHECKPOINT_INTERVAL_MS) return;
