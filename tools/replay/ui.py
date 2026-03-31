@@ -344,15 +344,16 @@ def ui_thread(addr, route_entries=None, playback="1.0", data_dir=None, prefix="u
   radar_heatmap_mode_idx = 0
   current_playback = min(REPLAY_SPEEDS, key=lambda speed: abs(speed - float(playback)))
   last_replay_started_at = time.monotonic()
+  playback_ready = False
   loading_status = "Initializing UI"
 
   def current_offset_seconds() -> int:
-    if paused or replay_proc is None or replay_proc.poll() is not None:
+    if paused or not playback_ready or replay_proc is None or replay_proc.poll() is not None:
       return current_start_seconds
     return max(0, int(current_start_seconds + (time.monotonic() - last_replay_started_at) * current_playback))
 
   def connect_streams():
-    nonlocal replay_proc, current_route_name, current_route_model, current_route_idx, current_start_seconds, loading_status, paused, last_replay_started_at, current_playback
+    nonlocal replay_proc, current_route_name, current_route_model, current_route_idx, current_start_seconds, loading_status, paused, last_replay_started_at, current_playback, playback_ready
 
     if route_entries:
       current_route_name, current_route_model = route_entries[current_route_idx]
@@ -362,7 +363,7 @@ def ui_thread(addr, route_entries=None, playback="1.0", data_dir=None, prefix="u
       messaging.reset_context()
       replay_proc = start_replay(current_route_name, prefix, f"{current_playback:.1f}", data_dir, current_start_seconds)
       paused = False
-      last_replay_started_at = time.monotonic()
+      playback_ready = False
       loading_status = "Waiting for CAN socket"
       wait_for_can_socket(prefix, REPLAY_SOCKET_WAIT_TIMEOUT_SECONDS)
 
@@ -609,6 +610,9 @@ def ui_thread(addr, route_entries=None, playback="1.0", data_dir=None, prefix="u
       rl.end_drawing()
       continue
 
+    if not playback_ready:
+      playback_ready = True
+      last_replay_started_at = time.monotonic()
     loading_status = "Streaming"
 
     lid_overlay = lid_overlay_blank.copy()
