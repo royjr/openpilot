@@ -1,7 +1,13 @@
 """
-MADS (Modified Assistive Driving Safety) - Decouples lateral control from longitudinal control.
+Copyright (c) 2021-, Haibin Wen, sunnypilot, and a number of other contributors.
 
-Ported from sunnypilot (Copyright (c) 2021-, Haibin Wen, sunnypilot contributors, MIT License).
+This file is part of sunnypilot and is licensed under the MIT License.
+See the LICENSE.md file in the root directory for more details.
+
+This project uses software from Haibin Wen and SUNNYPILOT LLC and is
+licensed under a custom license requiring permission for use.
+
+MADS (Modified Assistive Driving Safety) - Decouples lateral control from longitudinal control.
 Simplified for stock openpilot with Hyundai focus.
 """
 

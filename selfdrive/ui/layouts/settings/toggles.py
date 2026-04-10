@@ -23,6 +23,15 @@ DESCRIPTIONS = {
     "In relaxed mode openpilot will stay further away from lead cars. On supported cars, you can cycle through these personalities with " +
     "your steering wheel distance button."
   ),
+  "MadsEnabled": tr_noop(
+    "Enable MADS (Modified Assistive Driving Safety) to allow lateral control (steering) independently of longitudinal control (cruise). " +
+    "When enabled, use the LKAS button on your steering wheel to toggle steering assistance on or off without needing cruise control active."
+  ),
+  "MadsBrakeMode": tr_noop(
+    "Controls what happens to steering assistance when you press the brake pedal. " +
+    "Remain Active keeps steering on. Pause temporarily disables steering and resumes when brake is released. " +
+    "Disengage fully turns off steering assistance."
+  ),
   "IsLdwEnabled": tr_noop(
     "Receive alerts to steer back into the lane when your vehicle drifts over a detected lane line " +
     "without a turn signal activated while driving over 31 mph (50 km/h)."
@@ -60,6 +69,12 @@ class TogglesLayout(Widget):
         "disengage_on_accelerator.png",
         False,
       ),
+      "MadsEnabled": (
+        lambda: tr("Enable MADS"),
+        DESCRIPTIONS["MadsEnabled"],
+        "chffr_wheel.png",
+        True,
+      ),
       "IsLdwEnabled": (
         lambda: tr("Enable Lane Departure Warnings"),
         DESCRIPTIONS["IsLdwEnabled"],
@@ -91,6 +106,16 @@ class TogglesLayout(Widget):
         False,
       ),
     }
+
+    self._mads_brake_mode_setting = multiple_button_item(
+      lambda: tr("MADS Brake Behavior"),
+      lambda: tr(DESCRIPTIONS["MadsBrakeMode"]),
+      buttons=[lambda: tr("Active"), lambda: tr("Pause"), lambda: tr("Disengage")],
+      button_width=225,
+      callback=self._set_mads_brake_mode,
+      selected_index=self._params.get("MadsBrakeMode", return_default=True),
+      icon="chffr_wheel.png"
+    )
 
     self._long_personality_setting = multiple_button_item(
       lambda: tr("Driving Personality"),
@@ -130,6 +155,10 @@ class TogglesLayout(Widget):
         self._locked_toggles.add(param)
 
       self._toggles[param] = toggle
+
+      # insert MADS brake mode after MADS toggle
+      if param == "MadsEnabled":
+        self._toggles["MadsBrakeMode"] = self._mads_brake_mode_setting
 
       # insert longitudinal personality after NDOG toggle
       if param == "DisengageOnAccelerator":
@@ -240,6 +269,9 @@ class TogglesLayout(Widget):
     self._params.put_bool(param, state)
     if self._toggle_defs[param][3]:
       self._params.put_bool("OnroadCycleRequested", True)
+
+  def _set_mads_brake_mode(self, button_index: int):
+    self._params.put("MadsBrakeMode", button_index)
 
   def _set_longitudinal_personality(self, button_index: int):
     self._params.put("LongitudinalPersonality", button_index)

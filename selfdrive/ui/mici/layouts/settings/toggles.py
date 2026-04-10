@@ -15,6 +15,8 @@ class TogglesLayoutMici(NavScroller):
 
     self._personality_toggle = BigMultiParamToggle("driving personality", "LongitudinalPersonality", ["aggressive", "standard", "relaxed"])
     self._experimental_btn = BigParamControl("experimental mode", "ExperimentalMode")
+    self._mads_toggle = BigParamControl("enable mads", "MadsEnabled", toggle_callback=restart_needed_callback)
+    self._mads_brake_toggle = BigMultiParamToggle("mads brake", "MadsBrakeMode", ["active", "pause", "disengage"])
     is_metric_toggle = BigParamControl("use metric units", "IsMetric")
     ldw_toggle = BigParamControl("lane departure warnings", "IsLdwEnabled")
     always_on_dm_toggle = BigParamControl("always-on driver monitor", "AlwaysOnDM")
@@ -25,6 +27,8 @@ class TogglesLayoutMici(NavScroller):
     self._scroller.add_widgets([
       self._personality_toggle,
       self._experimental_btn,
+      self._mads_toggle,
+      self._mads_brake_toggle,
       is_metric_toggle,
       ldw_toggle,
       always_on_dm_toggle,
@@ -36,6 +40,7 @@ class TogglesLayoutMici(NavScroller):
     # Toggle lists
     self._refresh_toggles = (
       ("ExperimentalMode", self._experimental_btn),
+      ("MadsEnabled", self._mads_toggle),
       ("IsMetric", is_metric_toggle),
       ("IsLdwEnabled", ldw_toggle),
       ("AlwaysOnDM", always_on_dm_toggle),
