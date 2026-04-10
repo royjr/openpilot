@@ -19,6 +19,7 @@ from openpilot.selfdrive.locationd.helpers import PoseCalibrator, Pose
 from openpilot.selfdrive.selfdrived.events import Events, ET
 from openpilot.selfdrive.selfdrived.helpers import ExcessiveActuationCheck
 from openpilot.selfdrive.selfdrived.state import StateMachine
+from openpilot.selfdrive.selfdrived.mads import Mads
 from openpilot.selfdrive.selfdrived.alertmanager import AlertManager, set_offroad_alert
 
 from openpilot.system.version import get_build_metadata
@@ -64,7 +65,7 @@ class SelfdriveD:
     self.excessive_actuation = self.params.get("Offroad_ExcessiveActuation") is not None
 
     # Setup sockets
-    self.pm = messaging.PubMaster(['selfdriveState', 'onroadEvents'])
+    self.pm = messaging.PubMaster(['selfdriveState', 'onroadEvents', 'madsState'])
 
     self.gps_location_service = get_gps_location_service(self.params)
     self.gps_packets = [self.gps_location_service]
@@ -121,6 +122,7 @@ class SelfdriveD:
     self.personality = self.params.get("LongitudinalPersonality", return_default=True)
     self.recalibrating_seen = False
     self.state_machine = StateMachine()
+    self.mads = Mads(self.CP)
     self.rk = Ratekeeper(100, print_delay_threshold=None)
 
     # Determine startup event
@@ -495,14 +497,29 @@ class SelfdriveD:
       self.pm.send('onroadEvents', ce_send)
     self.events_prev = self.events.names.copy()
 
+  def publish_madsState(self):
+    msg = messaging.new_message('madsState')
+    msg.valid = True
+    ms = msg.madsState
+    ms.state = self.mads.state_machine.state
+    ms.enabled = self.mads.enabled
+    ms.active = self.mads.active
+    ms.available = self.mads.available
+    self.pm.send('madsState', msg)
+
   def step(self):
     CS = self.data_sample()
     self.update_events(CS)
+
+    # MADS update: modifies events before stock state machine processes them
+    self.mads.update(self.events, CS, self.CS_prev, self.enabled, self.initialized)
+
     if not self.CP.passive and self.initialized:
       self.enabled, self.active = self.state_machine.update(self.events)
     self.update_alerts(CS)
 
     self.publish_selfdriveState(CS)
+    self.publish_madsState()
 
     self.CS_prev = CS
 
@@ -513,6 +530,8 @@ class SelfdriveD:
       self.disengage_on_accelerator = self.params.get_bool("DisengageOnAccelerator")
       self.experimental_mode = self.params.get_bool("ExperimentalMode") and self.CP.openpilotLongitudinalControl
       self.personality = self.params.get("LongitudinalPersonality", return_default=True)
+      self.mads.enabled_toggle = self.params.get_bool("MadsEnabled")
+      self.mads.read_params()
       time.sleep(0.1)
 
   def run(self):

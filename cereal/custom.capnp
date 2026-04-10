@@ -10,7 +10,19 @@ $Cxx.namespace("cereal");
 # DO rename the structs
 # DON'T change the identifier (e.g. @0x81c2f05a394cf4af)
 
-struct CustomReserved0 @0x81c2f05a394cf4af {
+struct MadsState @0x81c2f05a394cf4af {
+  state @0 :State;
+  enabled @1 :Bool;
+  active @2 :Bool;
+  available @3 :Bool;
+
+  enum State {
+    disabled @0;
+    paused @1;
+    enabled @2;
+    softDisabling @3;
+    overriding @4;
+  }
 }
 
 struct CustomReserved1 @0xaedffd8f31e7b55d {
